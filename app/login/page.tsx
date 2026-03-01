@@ -31,7 +31,7 @@ export default function LoginPage() {
     const actorIdentifier = data.user?.email ?? email;
     document.cookie = `app_session=1; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
     document.cookie = `app_user=${encodeURIComponent(actorIdentifier)}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
-    router.push('/daily-entry');
+    router.push('/dashboard');
   }
 
   return (

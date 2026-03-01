@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Factory, Settings, Truck, Users } from 'lucide-react';
+import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Factory, LayoutDashboard, Settings, Truck, Users } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from '@/lib/i18n/use-translation';
 
@@ -11,6 +11,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const { t } = useTranslation();
 
   const navItems = [
+    { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
     { href: '/daily-entry', label: t('nav.daily'), icon: Truck },
     { href: '/monthly-view', label: t('nav.monthly'), icon: CalendarDays },
     { href: '/quarterly-view', label: t('nav.quarterly'), icon: BarChart3 },

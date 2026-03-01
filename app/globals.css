@@ -67,6 +67,24 @@ select {
   z-index: 2;
 }
 
+.kpi-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.kpi-table th,
+.kpi-table td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  white-space: nowrap;
+}
+
+.kpi-table th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
 .control-row {
   display: flex;
   flex-wrap: wrap;
