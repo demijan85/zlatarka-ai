@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { actorFromRequest } from '@/lib/audit/actor';
+import { tryWriteAuditLog } from '@/lib/repositories/audit-logs';
 import { bulkUpsertSchema } from '@/lib/schemas/daily-entries';
 import { bulkUpsertDailyEntries } from '@/lib/repositories/daily-entries';
 import { IntakeMonthLockedError } from '@/lib/repositories/daily-intake-locks';
@@ -16,6 +18,19 @@ export async function PUT(request: Request) {
         supplierId: item.supplierId,
       }))
     );
+    const actor = actorFromRequest(request);
+    await tryWriteAuditLog({
+      actionType: 'daily_entries.qty.bulk_upsert',
+      entityType: 'daily_entries',
+      actorIdentifier: actor.actorIdentifier,
+      actorIp: actor.actorIp,
+      actorUserAgent: actor.actorUserAgent,
+      metadata: {
+        count: parsed.length,
+        uniqueSuppliers: [...new Set(parsed.map((item) => item.supplierId))].length,
+        yearMonths: [...new Set(parsed.map((item) => item.date.slice(0, 7)))],
+      },
+    });
 
     return NextResponse.json(data);
   } catch (error) {

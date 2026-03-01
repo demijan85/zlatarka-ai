@@ -74,6 +74,8 @@ export default function MonthlyViewPage() {
 
   const totalAmount = rows.reduce((sum, item) => sum + item.totalAmount, 0);
   const totalQty = rows.reduce((sum, item) => sum + item.qty, 0);
+  const alignCenter = { textAlign: 'center' as const };
+  const alignRight = { textAlign: 'right' as const };
 
   const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
   const orderedVersions = useMemo(
@@ -154,8 +156,8 @@ export default function MonthlyViewPage() {
           <button className="btn" onClick={() => openExport('/api/summaries/monthly/export', `monthly_summary_${year}_${month}.xlsx`)}>
             {t('monthly.exportSummary')}
           </button>
-          <button className="btn" onClick={() => openExport('/api/summaries/monthly/receipts', `monthly_receipts_${year}_${month}.xlsx`)}>
-            {t('monthly.exportReceipts')}
+          <button className="btn" onClick={() => openExport('/api/summaries/monthly/receipts/pdf', `monthly_receipts_${year}_${month}.pdf`)}>
+            {t('monthly.exportReceiptsPdf')}
           </button>
           <button className="btn" onClick={() => openExport('/api/summaries/monthly/payments', `payments_${year}_${month}.xml`)}>
             {t('monthly.exportPayments')}
@@ -167,17 +169,17 @@ export default function MonthlyViewPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>{t('table.rb')}</th>
+              <th style={alignCenter}>{t('table.rb')}</th>
               <th>{t('table.lastName')}</th>
               <th>{t('table.firstName')}</th>
-              <th>{t('monthly.qty')}</th>
-              <th>{t('monthly.mm')}</th>
-              <th>{t('monthly.priceMm')}</th>
-              <th>{t('monthly.priceQty')}</th>
-              <th>{t('monthly.tax')}</th>
-              <th>{t('monthly.priceTax')}</th>
-              <th>{t('monthly.stimulation')}</th>
-              <th>{t('monthly.totalAmount')}</th>
+              <th style={alignRight}>{t('monthly.qty')}</th>
+              <th style={alignCenter}>{t('monthly.mm')}</th>
+              <th style={alignRight}>{t('monthly.priceMm')}</th>
+              <th style={alignRight}>{t('monthly.priceQty')}</th>
+              <th style={alignCenter}>{t('monthly.tax')}</th>
+              <th style={alignRight}>{t('monthly.priceTax')}</th>
+              <th style={alignCenter}>{t('monthly.stimulation')}</th>
+              <th style={alignRight}>{t('monthly.totalAmount')}</th>
             </tr>
           </thead>
           <tbody>
@@ -198,26 +200,26 @@ export default function MonthlyViewPage() {
             ) : (
               rows.map((row) => (
                 <tr key={row.supplierId}>
-                  <td>{row.serialNum}</td>
+                  <td style={alignCenter}>{row.serialNum}</td>
                   <td>{row.lastName}</td>
                   <td>{row.firstName}</td>
-                  <td>{row.qty.toFixed(2)}</td>
-                  <td>{row.fatPct.toFixed(2)}</td>
-                  <td>{row.pricePerFatPct.toFixed(2)}</td>
-                  <td>{row.pricePerQty.toFixed(2)}</td>
-                  <td>{row.taxPercentage.toFixed(2)}</td>
-                  <td>{row.priceWithTax.toFixed(2)}</td>
-                  <td>{row.stimulation.toFixed(2)}</td>
-                  <td>{row.totalAmount.toFixed(2)}</td>
+                  <td style={alignRight}>{row.qty.toFixed(0)}</td>
+                  <td style={alignCenter}>{row.fatPct.toFixed(2)}</td>
+                  <td style={alignRight}>{row.pricePerFatPct.toFixed(2)}</td>
+                  <td style={alignRight}>{row.pricePerQty.toFixed(2)}</td>
+                  <td style={alignCenter}>{row.taxPercentage.toFixed(2)}</td>
+                  <td style={alignRight}>{row.priceWithTax.toFixed(2)}</td>
+                  <td style={alignCenter}>{row.stimulation.toFixed(2)}</td>
+                  <td style={alignRight}>{row.totalAmount.toFixed(2)}</td>
                 </tr>
               ))
             )}
             {rows.length > 0 ? (
               <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                 <td colSpan={3}>{t('table.totals')}</td>
-                <td>{totalQty.toFixed(2)}</td>
+                <td style={alignRight}>{totalQty.toFixed(0)}</td>
                 <td colSpan={6} />
-                <td>{totalAmount.toFixed(2)}</td>
+                <td style={alignRight}>{totalAmount.toFixed(2)}</td>
               </tr>
             ) : null}
           </tbody>

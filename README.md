@@ -18,10 +18,11 @@ A new Next.js application for milk factory purchase operations, rebuilt with a c
   - month lock/unlock (locked month is read-only)
   - bulk save + unsaved-change warning
   - daily XLSX export
+  - audit logs for lock/unlock and intake edits
 - Monthly view
   - filters by year/month/period/city
   - summary table
-  - exports: summary XLSX, receipts XLSX, payments XML
+  - exports: summary XLSX, receipts PDF, payments XML
 - Quarterly view
   - filters by year/quarter
   - summary table
@@ -32,6 +33,7 @@ A new Next.js application for milk factory purchase operations, rebuilt with a c
   - stimulation thresholds/amounts
   - premium per liter
   - constants versions persisted in DB (`valid_from` = YYYY-MM)
+  - audit logs for constants changes
 
 ## New libraries used
 
@@ -75,7 +77,7 @@ Open: `http://localhost:3000`
 - `/api/daily-entries/lock`
 - `/api/summaries/monthly`
 - `/api/summaries/monthly/export`
-- `/api/summaries/monthly/receipts`
+- `/api/summaries/monthly/receipts/pdf`
 - `/api/summaries/monthly/payments`
 - `/api/summaries/quarterly`
 - `/api/summaries/quarterly/export`
@@ -88,6 +90,7 @@ Open: `http://localhost:3000`
 - Safer bulk save pattern (only changed cells are persisted)
 - UI warnings for unsaved daily changes
 - Server-side month-lock enforcement for daily intake writes
+- Audit logs for critical actions (who/what/when)
 - Structured layout/components for maintainability
 
 ## DB update required for month lock
@@ -105,6 +108,10 @@ If you already created the table from an older script version and see check-cons
 For constants stored in DB, run:
 
 `v2/db/003_calculation_constants_versions.sql`
+
+For audit logging, run:
+
+`v2/db/004_audit_logs.sql`
 
 ## Hosting (cheap / free)
 

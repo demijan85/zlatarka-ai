@@ -16,6 +16,7 @@ export function Topbar() {
     const supabase = createBrowserSupabaseClient();
     await supabase.auth.signOut();
     document.cookie = 'app_session=; Path=/; Max-Age=0; SameSite=Lax';
+    document.cookie = 'app_user=; Path=/; Max-Age=0; SameSite=Lax';
     router.push('/login');
   }
 

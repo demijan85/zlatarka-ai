@@ -57,6 +57,8 @@ export default function QuarterlyViewPage() {
 
   const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
   const totalPremium = rows.reduce((sum, row) => sum + row.totalPremium, 0);
+  const alignCenter = { textAlign: 'center' as const };
+  const alignRight = { textAlign: 'right' as const };
 
   const startMonth = (quarter - 1) * 3 + 1;
   const currentYearMonth = useMemo(() => yearMonthFrom(year, startMonth), [year, startMonth]);
@@ -126,13 +128,13 @@ export default function QuarterlyViewPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>{t('table.rb')}</th>
+              <th style={alignCenter}>{t('table.rb')}</th>
               <th>{t('table.lastName')}</th>
               <th>{t('table.firstName')}</th>
-              <th>{t('monthly.qty')}</th>
-              <th>{t('quarterly.cows')}</th>
-              <th>{t('quarterly.premiumPerL')}</th>
-              <th>{t('quarterly.totalPremium')}</th>
+              <th style={alignRight}>{t('monthly.qty')}</th>
+              <th style={alignCenter}>{t('quarterly.cows')}</th>
+              <th style={alignRight}>{t('quarterly.premiumPerL')}</th>
+              <th style={alignRight}>{t('quarterly.totalPremium')}</th>
             </tr>
           </thead>
           <tbody>
@@ -153,23 +155,23 @@ export default function QuarterlyViewPage() {
             ) : (
               rows.map((row) => (
                 <tr key={row.supplierId}>
-                  <td>{row.serialNum}</td>
+                  <td style={alignCenter}>{row.serialNum}</td>
                   <td>{row.lastName}</td>
                   <td>{row.firstName}</td>
-                  <td>{row.qty.toFixed(2)}</td>
-                  <td>{row.cows}</td>
-                  <td>{row.premiumPerL.toFixed(2)}</td>
-                  <td>{row.totalPremium.toFixed(2)}</td>
+                  <td style={alignRight}>{row.qty.toFixed(0)}</td>
+                  <td style={alignCenter}>{row.cows}</td>
+                  <td style={alignRight}>{row.premiumPerL.toFixed(2)}</td>
+                  <td style={alignRight}>{row.totalPremium.toFixed(2)}</td>
                 </tr>
               ))
             )}
             {rows.length > 0 ? (
               <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                 <td colSpan={3}>{t('table.totals')}</td>
-                <td>{totalQty.toFixed(2)}</td>
+                <td style={alignRight}>{totalQty.toFixed(0)}</td>
                 <td />
                 <td />
-                <td>{totalPremium.toFixed(2)}</td>
+                <td style={alignRight}>{totalPremium.toFixed(2)}</td>
               </tr>
             ) : null}
           </tbody>

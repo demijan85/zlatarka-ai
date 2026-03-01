@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { actorFromRequest } from '@/lib/audit/actor';
+import { tryWriteAuditLog } from '@/lib/repositories/audit-logs';
 import { dailyIntakeLockSchema } from '@/lib/schemas/daily-entries';
 import { getDailyIntakeLock, setDailyIntakeLock } from '@/lib/repositories/daily-intake-locks';
 import { parseMonth, parseYear } from '@/lib/utils/date';
@@ -26,6 +28,19 @@ export async function PUT(request: Request) {
     const parsed = dailyIntakeLockSchema.parse(body);
 
     const data = await setDailyIntakeLock(parsed.yearMonth, parsed.isLocked);
+    const actor = actorFromRequest(request);
+    await tryWriteAuditLog({
+      actionType: parsed.isLocked ? 'daily_intake.lock' : 'daily_intake.unlock',
+      entityType: 'daily_intake_month',
+      entityId: parsed.yearMonth,
+      actorIdentifier: actor.actorIdentifier,
+      actorIp: actor.actorIp,
+      actorUserAgent: actor.actorUserAgent,
+      metadata: {
+        yearMonth: parsed.yearMonth,
+        isLocked: parsed.isLocked,
+      },
+    });
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
