@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import type { DailyEntry, Supplier } from '@/types/domain';
+import { yearMonthFrom } from '@/lib/utils/year-month';
+import type { DailyEntry, DailyIntakeLock, Supplier } from '@/types/domain';
 
 type Period = 'FIRST_HALF' | 'SECOND_HALF' | 'FULL';
 
@@ -27,6 +28,17 @@ function getDefaultPeriod(dayOfMonth: number): Period {
   return dayOfMonth <= 15 ? 'FIRST_HALF' : 'SECOND_HALF';
 }
 
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const parsed = (await response.json()) as { error?: string };
+    if (parsed.error) return new Error(parsed.error);
+  } catch {
+    // ignore non-json response
+  }
+
+  return new Error(fallback);
+}
+
 async function fetchSuppliers(): Promise<Supplier[]> {
   const response = await fetch('/api/suppliers');
   if (!response.ok) throw new Error('Failed to fetch suppliers');
@@ -40,6 +52,12 @@ async function fetchEntries(year: number, month: number): Promise<DailyEntry[]> 
   return response.json();
 }
 
+async function fetchLockStatus(year: number, month: number): Promise<DailyIntakeLock> {
+  const response = await fetch(`/api/daily-entries/lock?year=${year}&month=${month}`);
+  if (!response.ok) throw new Error('Failed to fetch month lock status');
+  return response.json();
+}
+
 export default function DailyEntryPage() {
   const now = new Date();
   const { t, language } = useTranslation();
@@ -49,6 +67,7 @@ export default function DailyEntryPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [period, setPeriod] = useState<Period>(getDefaultPeriod(now.getDate()));
   const [changes, setChanges] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState('');
 
   const [qualitySupplier, setQualitySupplier] = useState<Supplier | null>(null);
   const [qualityRows, setQualityRows] = useState<QualityDraftRow[]>([]);
@@ -65,11 +84,28 @@ export default function DailyEntryPage() {
     queryFn: () => fetchEntries(year, month),
   });
 
+  const { data: lockStatus, isLoading: lockLoading } = useQuery({
+    queryKey: ['daily-lock', year, month],
+    queryFn: () => fetchLockStatus(year, month),
+  });
+
   const isLoading = suppliersLoading || entriesLoading;
+  const yearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
+  const isLocked = lockStatus?.isLocked ?? false;
+  const editingDisabled = isLocked || lockLoading;
 
   useEffect(() => {
     setChanges({});
+    setActionError('');
   }, [year, month]);
+
+  useEffect(() => {
+    if (isLocked) {
+      setQualitySupplier(null);
+      setQualityRows([]);
+      setChanges({});
+    }
+  }, [isLocked]);
 
   const dayNumbers = useMemo(() => {
     const total = daysInMonth(year, month);
@@ -98,16 +134,20 @@ export default function DailyEntryPage() {
     return map;
   }, [entries]);
 
-  const getCellValue = useCallback((supplierId: number, day: number): number => {
-    const key = `${supplierId}_${day}`;
-    if (changes[key] !== undefined) {
-      const parsed = Number(changes[key]);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return originalQtyMap.get(key) ?? 0;
-  }, [changes, originalQtyMap]);
+  const getCellValue = useCallback(
+    (supplierId: number, day: number): number => {
+      const key = `${supplierId}_${day}`;
+      if (changes[key] !== undefined) {
+        const parsed = Number(changes[key]);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return originalQtyMap.get(key) ?? 0;
+    },
+    [changes, originalQtyMap]
+  );
 
   function setCellValue(supplierId: number, day: number, value: string) {
+    if (editingDisabled) return;
     const key = `${supplierId}_${day}`;
     setChanges((prev) => ({ ...prev, [key]: value }));
   }
@@ -143,6 +183,8 @@ export default function DailyEntryPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (editingDisabled) throw new Error(t('daily.editBlocked'));
+
       const payload: Array<{ date: string; qty: number; supplierId: number }> = [];
 
       for (const [key, raw] of Object.entries(changes)) {
@@ -170,12 +212,46 @@ export default function DailyEntryPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error('Failed to save changes');
+      if (!response.ok) throw await responseError(response, 'Failed to save changes');
       return response.json();
     },
     onSuccess: async () => {
+      setActionError('');
       setChanges({});
       await queryClient.invalidateQueries({ queryKey: ['entries', year, month] });
+      await queryClient.invalidateQueries({ queryKey: ['daily-lock', year, month] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : t('daily.editBlocked'));
+    },
+  });
+
+  const lockMutation = useMutation({
+    mutationFn: async (nextLocked: boolean) => {
+      const response = await fetch('/api/daily-entries/lock', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yearMonth,
+          isLocked: nextLocked,
+        }),
+      });
+
+      if (!response.ok) throw await responseError(response, t('daily.lockActionFailed'));
+      return response.json() as Promise<DailyIntakeLock>;
+    },
+    onSuccess: async (_data, nextLocked) => {
+      setActionError('');
+      if (nextLocked) {
+        setChanges({});
+        setQualitySupplier(null);
+        setQualityRows([]);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['daily-lock', year, month] });
+      await queryClient.invalidateQueries({ queryKey: ['entries', year, month] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : t('daily.lockActionFailed'));
     },
   });
 
@@ -183,13 +259,13 @@ export default function DailyEntryPage() {
   useEffect(() => {
     const hasUnsaved = Object.keys(changes).length > 0;
     const handler = (event: BeforeUnloadEvent) => {
-      if (!hasUnsaved) return;
+      if (!hasUnsaved || editingDisabled) return;
       event.preventDefault();
       event.returnValue = unsavedWarning;
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [changes, unsavedWarning]);
+  }, [changes, unsavedWarning, editingDisabled]);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -199,11 +275,9 @@ export default function DailyEntryPage() {
     ref?.select();
   }
 
-  function onCellKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement>,
-    row: number,
-    col: number
-  ) {
+  function onCellKeyDown(event: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
+    if (editingDisabled) return;
+
     const maxRow = suppliers.length - 1;
     const maxCol = dayNumbers.length - 1;
 
@@ -250,6 +324,8 @@ export default function DailyEntryPage() {
   }
 
   function openQualityEditor(supplier: Supplier) {
+    if (editingDisabled) return;
+
     setQualitySupplier(supplier);
 
     const baseRows = entries
@@ -262,6 +338,7 @@ export default function DailyEntryPage() {
 
   const qualityMutation = useMutation({
     mutationFn: async () => {
+      if (editingDisabled) throw new Error(t('daily.editBlocked'));
       if (!qualitySupplier) return;
 
       const existing = entries.filter((item) => item.supplier_id === qualitySupplier.id && item.fat_pct !== null);
@@ -271,7 +348,7 @@ export default function DailyEntryPage() {
       const deleteIds = [...existingIds].filter((id) => !finalIds.has(id));
       for (const id of deleteIds) {
         const response = await fetch(`/api/daily-entries/${id}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Failed to delete quality record');
+        if (!response.ok) throw await responseError(response, 'Failed to delete quality record');
       }
 
       for (const row of qualityRows) {
@@ -288,13 +365,18 @@ export default function DailyEntryPage() {
           }),
         });
 
-        if (!response.ok) throw new Error('Failed to upsert quality record');
+        if (!response.ok) throw await responseError(response, 'Failed to upsert quality record');
       }
     },
     onSuccess: async () => {
+      setActionError('');
       setQualitySupplier(null);
       setQualityRows([]);
       await queryClient.invalidateQueries({ queryKey: ['entries', year, month] });
+      await queryClient.invalidateQueries({ queryKey: ['daily-lock', year, month] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : t('daily.editBlocked'));
     },
   });
 
@@ -322,6 +404,19 @@ export default function DailyEntryPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, t('nav.daily'));
     XLSX.writeFile(wb, `daily_intake_${year}_${month}.xlsx`);
+  }
+
+  function toggleMonthLock() {
+    const hasUnsaved = Object.keys(changes).length > 0;
+    if (!isLocked && hasUnsaved) {
+      const confirmedUnsaved = confirm(t('daily.confirmLockUnsaved'));
+      if (!confirmedUnsaved) return;
+    }
+
+    const confirmed = confirm(isLocked ? t('daily.confirmUnlock') : t('daily.confirmLock'));
+    if (!confirmed) return;
+
+    lockMutation.mutate(!isLocked);
   }
 
   return (
@@ -362,14 +457,37 @@ export default function DailyEntryPage() {
             {t('common.exportXlsx')}
           </button>
 
-          <button className="btn" onClick={() => setChanges({})}>
+          <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
             {t('daily.discard')}
           </button>
 
-          <button className="btn primary" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+          <button
+            className="btn primary"
+            onClick={() => saveMutation.mutate()}
+            disabled={editingDisabled || saveMutation.isPending}
+          >
             {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
           </button>
         </div>
+
+        <div className="control-row" style={{ justifyContent: 'space-between' }}>
+          <div className="control-row">
+            <span className="muted">{t('daily.lockStatus')}:</span>
+            <span className="badge" style={isLocked ? { background: '#fee2e2', color: '#b91c1c' } : undefined}>
+              {isLocked ? t('daily.locked') : t('daily.unlocked')}
+            </span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {yearMonth}
+            </span>
+          </div>
+
+          <button className="btn" onClick={toggleMonthLock} disabled={lockLoading || lockMutation.isPending}>
+            {lockMutation.isPending ? t('common.saving') : isLocked ? t('daily.unlockMonth') : t('daily.lockMonth')}
+          </button>
+        </div>
+
+        {isLocked ? <div className="muted">{t('daily.lockedReadonly')}</div> : null}
+        {actionError ? <div style={{ color: 'var(--danger)', fontSize: 13 }}>{actionError}</div> : null}
       </div>
 
       <div className="table-wrap">
@@ -414,6 +532,7 @@ export default function DailyEntryPage() {
                           className="input"
                           style={{ width: 64, textAlign: 'right', padding: '6px 8px' }}
                           value={value}
+                          disabled={editingDisabled}
                           onChange={(e) => setCellValue(supplier.id, day, e.target.value)}
                           onFocus={(e) => e.target.select()}
                           onKeyDown={(e) => onCellKeyDown(e, rowIndex, colIndex)}
@@ -429,7 +548,7 @@ export default function DailyEntryPage() {
                   <td style={{ fontWeight: 600 }}>{(rowTotals[supplier.id] ?? 0).toFixed(2)}</td>
                   <td>{averageFatForSupplier(supplier.id)}</td>
                   <td>
-                    <button className="btn" onClick={() => openQualityEditor(supplier)}>
+                    <button className="btn" onClick={() => openQualityEditor(supplier)} disabled={editingDisabled}>
                       {t('daily.editMm')}
                     </button>
                   </td>
@@ -482,6 +601,7 @@ export default function DailyEntryPage() {
                     className="input"
                     type="date"
                     value={row.date}
+                    disabled={editingDisabled}
                     onChange={(e) => {
                       const next = [...qualityRows];
                       next[index] = { ...next[index], date: e.target.value };
@@ -493,6 +613,7 @@ export default function DailyEntryPage() {
                     type="number"
                     step="0.1"
                     value={row.fat_pct}
+                    disabled={editingDisabled}
                     onChange={(e) => {
                       const next = [...qualityRows];
                       next[index] = { ...next[index], fat_pct: e.target.value };
@@ -501,6 +622,7 @@ export default function DailyEntryPage() {
                   />
                   <button
                     className="btn danger"
+                    disabled={editingDisabled}
                     onClick={() => setQualityRows((prev) => prev.filter((_, i) => i !== index))}
                   >
                     {t('common.remove')}
@@ -512,6 +634,7 @@ export default function DailyEntryPage() {
             <div className="control-row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
               <button
                 className="btn"
+                disabled={editingDisabled}
                 onClick={() =>
                   setQualityRows((prev) => [
                     ...prev,
@@ -534,7 +657,7 @@ export default function DailyEntryPage() {
                 <button
                   className="btn primary"
                   onClick={() => qualityMutation.mutate()}
-                  disabled={qualityMutation.isPending}
+                  disabled={editingDisabled || qualityMutation.isPending}
                 >
                   {qualityMutation.isPending ? t('common.saving') : t('daily.saveQuality')}
                 </button>

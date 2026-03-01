@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dailyEntryUpsertSchema } from '@/lib/schemas/daily-entries';
 import { upsertDailyEntry } from '@/lib/repositories/daily-entries';
+import { IntakeMonthLockedError } from '@/lib/repositories/daily-intake-locks';
 
 export async function PUT(request: Request) {
   try {
@@ -17,6 +18,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof IntakeMonthLockedError ? 423 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

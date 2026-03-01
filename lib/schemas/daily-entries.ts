@@ -15,3 +15,8 @@ export const dailyEntryUpsertSchema = z.object({
 });
 
 export const bulkUpsertSchema = z.array(dailyEntryUpsertSchema);
+
+export const dailyIntakeLockSchema = z.object({
+  yearMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  isLocked: z.boolean(),
+});

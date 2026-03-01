@@ -1,6 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import type { DailyEntry } from '@/types/domain';
 import { getMonthBounds } from '@/lib/utils/date';
+import {
+  assertDailyIntakeUnlockedByEntryId,
+  assertDailyIntakeUnlockedForDate,
+  assertDailyIntakeUnlockedForDates,
+} from './daily-intake-locks';
 
 async function ensureSupplierExists(supplierId: number): Promise<void> {
   const supabase = createServerSupabaseClient();
@@ -35,6 +40,7 @@ export async function upsertDailyEntry(payload: {
   qty?: number;
   fat_pct?: number | null;
 }): Promise<DailyEntry> {
+  await assertDailyIntakeUnlockedForDate(payload.date);
   await ensureSupplierExists(payload.supplierId);
 
   const supabase = createServerSupabaseClient();
@@ -82,6 +88,7 @@ export async function upsertDailyEntry(payload: {
 export async function bulkUpsertDailyEntries(
   payload: Array<{ date: string; supplierId: number; qty?: number; fat_pct?: number | null }>
 ): Promise<DailyEntry[]> {
+  await assertDailyIntakeUnlockedForDates(payload.map((item) => item.date));
   const result: DailyEntry[] = [];
   for (const entry of payload) {
     result.push(await upsertDailyEntry(entry));
@@ -90,6 +97,7 @@ export async function bulkUpsertDailyEntries(
 }
 
 export async function deleteDailyEntry(id: number): Promise<void> {
+  await assertDailyIntakeUnlockedByEntryId(id);
   const supabase = createServerSupabaseClient();
   const { error } = await supabase.from('daily_entries').delete().eq('id', id);
   if (error) throw new Error(`Failed to delete daily entry ${id}: ${error.message}`);

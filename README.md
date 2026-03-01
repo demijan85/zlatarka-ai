@@ -15,6 +15,7 @@ A new Next.js application for milk factory purchase operations, rebuilt with a c
   - fast numeric input per supplier/day
   - row totals, column totals, grand total
   - periodic quality (fat %) editing per supplier
+  - month lock/unlock (locked month is read-only)
   - bulk save + unsaved-change warning
   - daily XLSX export
 - Monthly view
@@ -30,11 +31,12 @@ A new Next.js application for milk factory purchase operations, rebuilt with a c
   - tax %
   - stimulation thresholds/amounts
   - premium per liter
+  - constants versions persisted in DB (`valid_from` = YYYY-MM)
 
 ## New libraries used
 
 - `@tanstack/react-query` for data fetching/caching
-- `zustand` for lightweight global state (calculation constants)
+- `zustand` for lightweight global UI state (language)
 - `react-hook-form` + `zod` for input validation
 - `@supabase/ssr` + `@supabase/supabase-js` for auth/data
 - `lucide-react` for modern icon set
@@ -64,10 +66,13 @@ Open: `http://localhost:3000`
 - `/api/suppliers`
 - `/api/suppliers/[id]`
 - `/api/suppliers/reorder`
+- `/api/constants/versions`
+- `/api/constants/versions/[validFrom]`
 - `/api/daily-entries`
 - `/api/daily-entries/[id]`
 - `/api/daily-entries/upsert`
 - `/api/daily-entries/bulk-upsert`
+- `/api/daily-entries/lock`
 - `/api/summaries/monthly`
 - `/api/summaries/monthly/export`
 - `/api/summaries/monthly/receipts`
@@ -82,7 +87,24 @@ Open: `http://localhost:3000`
 - Centralized and user-exposed calculation constants
 - Safer bulk save pattern (only changed cells are persisted)
 - UI warnings for unsaved daily changes
+- Server-side month-lock enforcement for daily intake writes
 - Structured layout/components for maintainability
+
+## DB update required for month lock
+
+Run SQL from:
+
+`v2/db/001_daily_intake_locks.sql`
+
+This creates `daily_intake_locks` used by lock/unlock and write protection.
+
+If you already created the table from an older script version and see check-constraint errors for values like `2025-03`, run:
+
+`v2/db/002_fix_daily_intake_locks_year_month_check.sql`
+
+For constants stored in DB, run:
+
+`v2/db/003_calculation_constants_versions.sql`
 
 ## Hosting (cheap / free)
 

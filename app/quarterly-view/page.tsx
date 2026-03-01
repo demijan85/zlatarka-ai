@@ -3,20 +3,38 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { QuarterlySummaryRow } from '@/types/domain';
-import { getEffectiveConstantsForPeriod, toCalculationConstants } from '@/lib/constants/calculation';
-import { useConstantsStore } from '@/lib/constants/store';
-import { constantsQueryValue } from '@/lib/constants/query';
+import {
+  defaultVersionedConstants,
+  getEffectiveConstantsForPeriod,
+  sortVersions,
+  type VersionedCalculationConstants,
+} from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 
-async function fetchQuarterly(year: number, quarter: number, constantsEncoded: string): Promise<QuarterlySummaryRow[]> {
+async function parseError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const parsed = (await response.json()) as { error?: string };
+    if (parsed.error) return new Error(parsed.error);
+  } catch {
+    // ignore parse error
+  }
+  return new Error(fallback);
+}
+
+async function fetchQuarterly(year: number, quarter: number): Promise<QuarterlySummaryRow[]> {
   const params = new URLSearchParams({
     year: String(year),
     quarter: String(quarter),
-    constants: constantsEncoded,
   });
   const response = await fetch(`/api/summaries/quarterly?${params.toString()}`);
-  if (!response.ok) throw new Error('Failed to fetch quarterly summaries');
+  if (!response.ok) throw await parseError(response, 'Failed to fetch quarterly summaries');
+  return response.json();
+}
+
+async function fetchConstantVersions(): Promise<VersionedCalculationConstants[]> {
+  const response = await fetch('/api/constants/versions');
+  if (!response.ok) throw await parseError(response, 'Failed to fetch constants versions');
   return response.json();
 }
 
@@ -27,35 +45,39 @@ export default function QuarterlyViewPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [quarter, setQuarter] = useState(currentQuarter);
 
-  const versions = useConstantsStore((state) => state.versions);
-
-  const startMonth = (quarter - 1) * 3 + 1;
-  const currentYearMonth = useMemo(() => yearMonthFrom(year, startMonth), [year, startMonth]);
-  const effectiveVersion = useMemo(
-    () => getEffectiveConstantsForPeriod(versions, currentYearMonth),
-    [versions, currentYearMonth]
-  );
-  const constants = useMemo(() => toCalculationConstants(effectiveVersion), [effectiveVersion]);
-  const encoded = useMemo(() => constantsQueryValue(constants), [constants]);
-
   const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ['quarterly', year, quarter, encoded],
-    queryFn: () => fetchQuarterly(year, quarter, encoded),
+    queryKey: ['quarterly', year, quarter],
+    queryFn: () => fetchQuarterly(year, quarter),
+  });
+
+  const { data: versionsData = [] } = useQuery({
+    queryKey: ['constants-versions'],
+    queryFn: fetchConstantVersions,
   });
 
   const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
   const totalPremium = rows.reduce((sum, row) => sum + row.totalPremium, 0);
 
+  const startMonth = (quarter - 1) * 3 + 1;
+  const currentYearMonth = useMemo(() => yearMonthFrom(year, startMonth), [year, startMonth]);
+  const orderedVersions = useMemo(
+    () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
+    [versionsData]
+  );
+  const effectiveVersion = useMemo(
+    () => getEffectiveConstantsForPeriod(orderedVersions, currentYearMonth),
+    [orderedVersions, currentYearMonth]
+  );
+
   function exportXlsx() {
     const params = new URLSearchParams({
       year: String(year),
       quarter: String(quarter),
-      constants: encoded,
     });
 
     fetch(`/api/summaries/quarterly/export?${params.toString()}`)
       .then(async (response) => {
-        if (!response.ok) throw new Error('Export failed');
+        if (!response.ok) throw await parseError(response, 'Export failed');
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');

@@ -3,32 +3,38 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { MonthlySummaryRow, Supplier } from '@/types/domain';
-import { getEffectiveConstantsForPeriod, toCalculationConstants } from '@/lib/constants/calculation';
-import { useConstantsStore } from '@/lib/constants/store';
-import { constantsQueryValue } from '@/lib/constants/query';
+import {
+  defaultVersionedConstants,
+  getEffectiveConstantsForPeriod,
+  sortVersions,
+  type VersionedCalculationConstants,
+} from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 
 type Period = 'first' | 'second' | 'all';
 
-async function fetchMonthly(
-  year: number,
-  month: number,
-  city: string,
-  period: Period,
-  constantsEncoded: string
-): Promise<MonthlySummaryRow[]> {
+async function parseError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const parsed = (await response.json()) as { error?: string };
+    if (parsed.error) return new Error(parsed.error);
+  } catch {
+    // ignore parse error
+  }
+  return new Error(fallback);
+}
+
+async function fetchMonthly(year: number, month: number, city: string, period: Period): Promise<MonthlySummaryRow[]> {
   const params = new URLSearchParams({
     year: String(year),
     month: String(month),
     city,
     period,
-    constants: constantsEncoded,
   });
 
   const response = await fetch(`/api/summaries/monthly?${params.toString()}`);
-  if (!response.ok) throw new Error('Failed to fetch monthly summaries');
+  if (!response.ok) throw await parseError(response, 'Failed to fetch monthly summaries');
   return response.json();
 }
 
@@ -37,6 +43,12 @@ async function fetchCities(): Promise<string[]> {
   if (!response.ok) return [];
   const data = (await response.json()) as Supplier[];
   return [...new Set(data.map((item) => item.city).filter(Boolean))] as string[];
+}
+
+async function fetchConstantVersions(): Promise<VersionedCalculationConstants[]> {
+  const response = await fetch('/api/constants/versions');
+  if (!response.ok) throw await parseError(response, 'Failed to fetch constants versions');
+  return response.json();
 }
 
 export default function MonthlyViewPage() {
@@ -49,25 +61,29 @@ export default function MonthlyViewPage() {
   const [city, setCity] = useState('');
   const [period, setPeriod] = useState<Period>('all');
 
-  const versions = useConstantsStore((state) => state.versions);
-
-  const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
-  const effectiveVersion = useMemo(
-    () => getEffectiveConstantsForPeriod(versions, currentYearMonth),
-    [versions, currentYearMonth]
-  );
-  const constants = useMemo(() => toCalculationConstants(effectiveVersion), [effectiveVersion]);
-  const encoded = useMemo(() => constantsQueryValue(constants), [constants]);
-
   const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ['monthly', year, month, city, period, encoded],
-    queryFn: () => fetchMonthly(year, month, city, period, encoded),
+    queryKey: ['monthly', year, month, city, period],
+    queryFn: () => fetchMonthly(year, month, city, period),
   });
 
   const { data: cities = [] } = useQuery({ queryKey: ['supplier-cities'], queryFn: fetchCities });
+  const { data: versionsData = [] } = useQuery({
+    queryKey: ['constants-versions'],
+    queryFn: fetchConstantVersions,
+  });
 
   const totalAmount = rows.reduce((sum, item) => sum + item.totalAmount, 0);
   const totalQty = rows.reduce((sum, item) => sum + item.qty, 0);
+
+  const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
+  const orderedVersions = useMemo(
+    () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
+    [versionsData]
+  );
+  const effectiveVersion = useMemo(
+    () => getEffectiveConstantsForPeriod(orderedVersions, currentYearMonth),
+    [orderedVersions, currentYearMonth]
+  );
 
   function openExport(path: string, fileName: string) {
     const params = new URLSearchParams({
@@ -75,12 +91,11 @@ export default function MonthlyViewPage() {
       month: String(month),
       city,
       period,
-      constants: encoded,
     });
 
     fetch(`${path}?${params.toString()}`)
       .then(async (response) => {
-        if (!response.ok) throw new Error('Export failed');
+        if (!response.ok) throw await parseError(response, 'Export failed');
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');

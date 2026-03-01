@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
-import { constantsFromSearchParams } from '@/lib/constants/from-request';
+import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getQuarterlySummaries } from '@/lib/repositories/summaries';
 import { parseQuarter, parseYear } from '@/lib/utils/date';
+import { yearMonthFrom } from '@/lib/utils/year-month';
 
 export async function GET(request: Request) {
   try {
@@ -11,8 +12,9 @@ export async function GET(request: Request) {
     const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
     const year = parseYear(searchParams.get('year'), now.getFullYear());
     const quarter = parseQuarter(searchParams.get('quarter'), currentQuarter);
-    const constants = constantsFromSearchParams(searchParams);
+    const startMonth = (quarter - 1) * 3 + 1;
 
+    const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, startMonth));
     const summaries = await getQuarterlySummaries({ year, quarter, constants });
 
     const workbook = new ExcelJS.Workbook();

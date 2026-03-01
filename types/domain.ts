@@ -24,6 +24,11 @@ export type DailyEntry = {
   supplier?: Supplier;
 };
 
+export type DailyIntakeLock = {
+  yearMonth: string;
+  isLocked: boolean;
+};
+
 export type MonthlySummaryRow = {
   serialNum: number;
   supplierId: number;

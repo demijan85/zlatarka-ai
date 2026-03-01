@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dailyEntrySchema } from '@/lib/schemas/daily-entries';
 import { getDailyEntriesForMonth, upsertDailyEntry } from '@/lib/repositories/daily-entries';
+import { IntakeMonthLockedError } from '@/lib/repositories/daily-intake-locks';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 
 export async function GET(request: Request) {
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof IntakeMonthLockedError ? 423 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

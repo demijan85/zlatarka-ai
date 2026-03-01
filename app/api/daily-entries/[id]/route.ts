@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { deleteDailyEntry } from '@/lib/repositories/daily-entries';
+import { IntakeMonthLockedError } from '@/lib/repositories/daily-intake-locks';
 
 function parseId(params: { id: string }): number {
   const id = Number(params.id);
@@ -14,6 +15,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof IntakeMonthLockedError ? 423 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

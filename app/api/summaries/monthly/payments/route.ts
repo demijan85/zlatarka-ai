@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { constantsFromSearchParams } from '@/lib/constants/from-request';
+import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
 import { escapeXml } from '@/lib/utils/xml';
+import { yearMonthFrom } from '@/lib/utils/year-month';
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -24,8 +25,8 @@ export async function GET(request: Request) {
     const month = parseMonth(searchParams.get('month'), now.getMonth() + 1);
     const period = normalizePeriod(searchParams.get('period'));
     const city = searchParams.get('city') || undefined;
-    const constants = constantsFromSearchParams(searchParams);
 
+    const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
     const summaries = await getMonthlySummaries({ year, month, city, period, constants });
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<pmtorderrq>\n`;

@@ -1,30 +1,59 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  defaultCalculationConstants,
+  defaultVersionedConstants,
   getEffectiveConstantsForPeriod,
   sortVersions,
   versionedCalculationConstantsSchema,
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
-import { useConstantsStore } from '@/lib/constants/store';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { yearMonthFrom } from '@/lib/utils/year-month';
+
+function currentYearMonth(): string {
+  const now = new Date();
+  return yearMonthFrom(now.getFullYear(), now.getMonth() + 1);
+}
+
+async function readError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const parsed = (await response.json()) as { error?: string };
+    if (parsed.error) return new Error(parsed.error);
+  } catch {
+    // ignore parse errors
+  }
+  return new Error(fallback);
+}
+
+async function fetchVersions(): Promise<VersionedCalculationConstants[]> {
+  const response = await fetch('/api/constants/versions');
+  if (!response.ok) throw await readError(response, 'Failed to fetch constants versions');
+  return response.json();
+}
 
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const versions = useConstantsStore((state) => state.versions);
-  const selectedYearMonth = useConstantsStore((state) => state.selectedYearMonth);
-  const setSelectedYearMonth = useConstantsStore((state) => state.setSelectedYearMonth);
-  const upsertVersion = useConstantsStore((state) => state.upsertVersion);
-  const removeVersion = useConstantsStore((state) => state.removeVersion);
-  const resetTimeline = useConstantsStore((state) => state.reset);
+  const queryClient = useQueryClient();
 
+  const [selectedYearMonth, setSelectedYearMonth] = useState(currentYearMonth());
   const [editingValidFrom, setEditingValidFrom] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
-  const orderedVersions = useMemo(() => sortVersions(versions), [versions]);
+  const { data: versionsData = [], isLoading, error } = useQuery({
+    queryKey: ['constants-versions'],
+    queryFn: fetchVersions,
+  });
+
+  const orderedVersions = useMemo(
+    () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
+    [versionsData]
+  );
+
   const activeVersion = useMemo(
     () => getEffectiveConstantsForPeriod(orderedVersions, selectedYearMonth),
     [orderedVersions, selectedYearMonth]
@@ -53,15 +82,58 @@ export default function SettingsPage() {
     reset({ ...activeVersion, validFrom: selectedYearMonth });
   }, [editingValidFrom, orderedVersions, activeVersion, selectedYearMonth, reset]);
 
+  const saveMutation = useMutation({
+    mutationFn: async (values: VersionedCalculationConstants) => {
+      const response = await fetch('/api/constants/versions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) throw await readError(response, 'Failed to save constants version');
+      return response.json() as Promise<VersionedCalculationConstants>;
+    },
+    onSuccess: async (saved) => {
+      setEditingValidFrom(saved.validFrom);
+      setMessage(t('settings.updated'));
+      await queryClient.invalidateQueries({ queryKey: ['constants-versions'] });
+    },
+    onError: (saveError) => {
+      setMessage(saveError instanceof Error ? saveError.message : 'Failed to save constants version');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (validFrom: string) => {
+      const response = await fetch(`/api/constants/versions/${encodeURIComponent(validFrom)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw await readError(response, 'Failed to remove constants version');
+    },
+    onSuccess: async () => {
+      setMessage('');
+      await queryClient.invalidateQueries({ queryKey: ['constants-versions'] });
+    },
+    onError: (deleteError) => {
+      setMessage(deleteError instanceof Error ? deleteError.message : 'Failed to remove constants version');
+    },
+  });
+
   function startNewVersion() {
     setEditingValidFrom(null);
     reset({ ...activeVersion, validFrom: selectedYearMonth });
   }
 
+  function useDefaults() {
+    setEditingValidFrom(null);
+    reset({
+      validFrom: selectedYearMonth,
+      ...defaultCalculationConstants,
+    });
+  }
+
   async function onSubmit(values: VersionedCalculationConstants) {
-    upsertVersion(values);
-    setEditingValidFrom(values.validFrom);
-    setMessage(t('settings.updated'));
+    await saveMutation.mutateAsync(values);
   }
 
   return (
@@ -107,42 +179,22 @@ export default function SettingsPage() {
 
           <div className="control-row">
             <label>{t('settings.stimLowTh')}</label>
-            <input
-              className="input"
-              type="number"
-              step="1"
-              {...register('stimulationLowThreshold', { valueAsNumber: true })}
-            />
+            <input className="input" type="number" step="1" {...register('stimulationLowThreshold', { valueAsNumber: true })} />
           </div>
 
           <div className="control-row">
             <label>{t('settings.stimHighTh')}</label>
-            <input
-              className="input"
-              type="number"
-              step="1"
-              {...register('stimulationHighThreshold', { valueAsNumber: true })}
-            />
+            <input className="input" type="number" step="1" {...register('stimulationHighThreshold', { valueAsNumber: true })} />
           </div>
 
           <div className="control-row">
             <label>{t('settings.stimLowAmt')}</label>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
-              {...register('stimulationLowAmount', { valueAsNumber: true })}
-            />
+            <input className="input" type="number" step="0.01" {...register('stimulationLowAmount', { valueAsNumber: true })} />
           </div>
 
           <div className="control-row">
             <label>{t('settings.stimHighAmt')}</label>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
-              {...register('stimulationHighAmount', { valueAsNumber: true })}
-            />
+            <input className="input" type="number" step="0.01" {...register('stimulationHighAmount', { valueAsNumber: true })} />
           </div>
 
           <div className="control-row">
@@ -150,34 +202,19 @@ export default function SettingsPage() {
             <input className="input" type="number" step="0.01" {...register('premiumPerLiter', { valueAsNumber: true })} />
           </div>
 
-          {Object.keys(errors).length ? (
-            <div style={{ color: 'var(--danger)' }}>{t('settings.invalidFields')}</div>
-          ) : null}
-
-          {message ? <div style={{ color: 'var(--accent-700)' }}>{message}</div> : null}
+          {Object.keys(errors).length ? <div style={{ color: 'var(--danger)' }}>{t('settings.invalidFields')}</div> : null}
+          {message ? <div style={{ color: message.includes('Failed') ? 'var(--danger)' : 'var(--accent-700)' }}>{message}</div> : null}
 
           <div className="control-row">
-            <button className="btn primary" type="submit" disabled={!isDirty || isSubmitting}>
-              {isSubmitting ? t('common.saving') : t('settings.saveVersion')}
+            <button className="btn primary" type="submit" disabled={!isDirty || isSubmitting || saveMutation.isPending}>
+              {isSubmitting || saveMutation.isPending ? t('common.saving') : t('settings.saveVersion')}
             </button>
 
-            <button
-              className="btn"
-              type="button"
-              onClick={startNewVersion}
-            >
+            <button className="btn" type="button" onClick={startNewVersion}>
               {t('settings.newVersion')}
             </button>
 
-            <button
-              className="btn"
-              type="button"
-              onClick={() => {
-                resetTimeline();
-                setEditingValidFrom(null);
-                setMessage('');
-              }}
-            >
+            <button className="btn" type="button" onClick={useDefaults}>
               {t('settings.resetDefaults')}
             </button>
           </div>
@@ -198,37 +235,49 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {orderedVersions.map((item) => (
-                <tr
-                  key={item.validFrom}
-                  style={item.validFrom === activeVersion.validFrom ? { background: '#fffbeb' } : undefined}
-                >
-                  <td>{item.validFrom}</td>
-                  <td>{item.pricePerFatPct.toFixed(2)}</td>
-                  <td>{item.taxPercentage.toFixed(2)}</td>
-                  <td>{item.premiumPerLiter.toFixed(2)}</td>
-                  <td>
-                    <div className="control-row">
-                      <button className="btn" onClick={() => setEditingValidFrom(item.validFrom)}>
-                        {t('common.edit')}
-                      </button>
-                      <button
-                        className="btn danger"
-                        onClick={() => {
-                          if (orderedVersions.length <= 1) return;
-                          removeVersion(item.validFrom);
-                          if (editingValidFrom === item.validFrom) {
-                            setEditingValidFrom(null);
-                          }
-                        }}
-                        disabled={orderedVersions.length <= 1}
-                      >
-                        {t('settings.removeVersion')}
-                      </button>
-                    </div>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5}>{t('common.loading')}</td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} style={{ color: 'var(--danger)' }}>
+                    {(error as Error).message}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                orderedVersions.map((item) => (
+                  <tr
+                    key={item.validFrom}
+                    style={item.validFrom === activeVersion.validFrom ? { background: '#fffbeb' } : undefined}
+                  >
+                    <td>{item.validFrom}</td>
+                    <td>{item.pricePerFatPct.toFixed(2)}</td>
+                    <td>{item.taxPercentage.toFixed(2)}</td>
+                    <td>{item.premiumPerLiter.toFixed(2)}</td>
+                    <td>
+                      <div className="control-row">
+                        <button className="btn" onClick={() => setEditingValidFrom(item.validFrom)}>
+                          {t('common.edit')}
+                        </button>
+                        <button
+                          className="btn danger"
+                          onClick={() => {
+                            if (orderedVersions.length <= 1) return;
+                            deleteMutation.mutate(item.validFrom);
+                            if (editingValidFrom === item.validFrom) {
+                              setEditingValidFrom(null);
+                            }
+                          }}
+                          disabled={orderedVersions.length <= 1 || deleteMutation.isPending}
+                        >
+                          {t('settings.removeVersion')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
