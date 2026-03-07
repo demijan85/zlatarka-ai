@@ -1,4 +1,5 @@
 import { defaultCalculationConstants, type CalculationConstants } from '@/lib/constants/calculation';
+import { average, monthlyTotalAmount, quarterlyTotalPremium } from '@/lib/calculations/formulas';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getMonthBounds, getQuarterBounds } from '@/lib/utils/date';
 import { filterDatesByPeriod, type Period } from '@/lib/utils/period';
@@ -12,16 +13,8 @@ function calculateMonthlyRow(
 ): MonthlySummaryRow {
   const qty = entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const fatValues = entries.map((item) => item.fat_pct).filter((x): x is number => x !== null && x !== undefined);
-  const fatPct = fatValues.length ? fatValues.reduce((a, b) => a + b, 0) / fatValues.length : 0;
-
-  const pricePerQty = fatPct * constants.pricePerFatPct;
-  const priceWithTax = pricePerQty * (1 + constants.taxPercentage / 100);
-
-  let stimulation = 0;
-  if (qty > constants.stimulationHighThreshold) stimulation = constants.stimulationHighAmount;
-  else if (qty > constants.stimulationLowThreshold) stimulation = constants.stimulationLowAmount;
-
-  const totalAmount = qty * (priceWithTax + stimulation);
+  const fatPct = average(fatValues);
+  const { pricePerQty, priceWithTax, stimulation, totalAmount } = monthlyTotalAmount(qty, fatPct, constants);
 
   return {
     serialNum,
@@ -148,7 +141,7 @@ export async function getQuarterlySummaries(options: {
         qty,
         cows: supplier.number_of_cows ?? 0,
         premiumPerL: constants.premiumPerLiter,
-        totalPremium: qty * constants.premiumPerLiter,
+        totalPremium: quarterlyTotalPremium(qty, constants.premiumPerLiter),
       };
     })
     .filter((item): item is QuarterlySummaryRow => item !== null);

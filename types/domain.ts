@@ -58,3 +58,75 @@ export type QuarterlySummaryRow = {
   premiumPerL: number;
   totalPremium: number;
 };
+
+export type SupplierHistoryMonth = {
+  month: number;
+  qty: number;
+  fatPct: number;
+  pricePerQty: number;
+  priceWithTax: number;
+  stimulation: number;
+  totalAmount: number;
+  activeDays: number;
+  measurementCount: number;
+  constantsValidFrom: string;
+};
+
+export type SupplierHistoryDay = {
+  date: string;
+  month: number;
+  day: number;
+  qty: number;
+  fatPct: number | null;
+};
+
+export type SupplierHistorySummary = {
+  totalQty: number;
+  totalAmount: number;
+  avgFatPct: number;
+  totalStimulationAmount: number;
+  activeMonths: number;
+  activeDays: number;
+  measurementCount: number;
+  lastDeliveryDate: string | null;
+};
+
+export type SupplierHistory = {
+  supplier: Supplier;
+  year: number;
+  summary: SupplierHistorySummary;
+  months: SupplierHistoryMonth[];
+  dailyEntries: SupplierHistoryDay[];
+};
+
+export type CorrectionRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export type CorrectionRequest = {
+  id: number;
+  yearMonth: string;
+  supplierId: number;
+  supplierName: string;
+  entryDate: string;
+  fieldName: 'qty' | 'fat_pct';
+  currentValue: number | null;
+  requestedValue: number;
+  reason: string;
+  status: CorrectionRequestStatus;
+  requestedBy: string;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  appliedEntryId: number | null;
+};
+
+export type AuditLogRecord = {
+  id: number;
+  actionType: string;
+  entityType: string;
+  entityId: string | null;
+  actorIdentifier: string;
+  actorIp: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};

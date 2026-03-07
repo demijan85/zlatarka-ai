@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { compareYearMonth } from '@/lib/utils/year-month';
+
+function compareYearMonth(a: string, b: string): number {
+  const [aYear, aMonth] = a.split('-').map(Number);
+  const [bYear, bMonth] = b.split('-').map(Number);
+
+  if (aYear !== bYear) return aYear - bYear;
+  return aMonth - bMonth;
+}
 
 export const calculationConstantsSchema = z.object({
   pricePerFatPct: z.number().nonnegative(),

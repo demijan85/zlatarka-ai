@@ -66,11 +66,27 @@ export default function DailyEntryPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [period, setPeriod] = useState<Period>(getDefaultPeriod(now.getDate()));
+  const [selectedDay, setSelectedDay] = useState(now.getDate());
   const [changes, setChanges] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState('');
+  const [actionInfo, setActionInfo] = useState('');
 
   const [qualitySupplier, setQualitySupplier] = useState<Supplier | null>(null);
   const [qualityRows, setQualityRows] = useState<QualityDraftRow[]>([]);
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [correctionDraft, setCorrectionDraft] = useState<{
+    supplierId: number;
+    day: number;
+    fieldName: 'qty' | 'fat_pct';
+    requestedValue: string;
+    reason: string;
+  }>({
+    supplierId: 0,
+    day: now.getDate(),
+    fieldName: 'qty',
+    requestedValue: '',
+    reason: '',
+  });
 
   const queryClient = useQueryClient();
 
@@ -97,6 +113,7 @@ export default function DailyEntryPage() {
   useEffect(() => {
     setChanges({});
     setActionError('');
+    setActionInfo('');
   }, [year, month]);
 
   useEffect(() => {
@@ -113,6 +130,22 @@ export default function DailyEntryPage() {
     if (period === 'SECOND_HALF') return Array.from({ length: Math.max(total - 15, 0) }, (_, i) => i + 16);
     return Array.from({ length: total }, (_, i) => i + 1);
   }, [year, month, period]);
+
+  useEffect(() => {
+    if (!dayNumbers.length) return;
+    if (!dayNumbers.includes(selectedDay)) {
+      setSelectedDay(dayNumbers[0]);
+    }
+  }, [dayNumbers, selectedDay]);
+
+  useEffect(() => {
+    if (!suppliers.length) return;
+    setCorrectionDraft((prev) => ({
+      ...prev,
+      supplierId: prev.supplierId > 0 ? prev.supplierId : suppliers[0].id,
+      day: dayNumbers.includes(prev.day) ? prev.day : dayNumbers[0],
+    }));
+  }, [suppliers, dayNumbers]);
 
   const originalQtyMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -268,6 +301,7 @@ export default function DailyEntryPage() {
   }, [changes, unsavedWarning, editingDisabled]);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const mobileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   function focusCell(row: number, col: number) {
     const ref = inputRefs.current[`${row}_${col}`];
@@ -320,6 +354,29 @@ export default function DailyEntryPage() {
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       if (row > 0) focusCell(row - 1, col);
+    }
+  }
+
+  function focusMobileInput(index: number) {
+    const ref = mobileInputRefs.current[index];
+    ref?.focus();
+    ref?.select();
+  }
+
+  function onMobileInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>, row: number) {
+    if (editingDisabled) return;
+
+    const maxRow = suppliers.length - 1;
+
+    if (event.key === 'ArrowDown' || event.key === 'Enter') {
+      event.preventDefault();
+      if (row < maxRow) focusMobileInput(row + 1);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (row > 0) focusMobileInput(row - 1);
     }
   }
 
@@ -380,6 +437,48 @@ export default function DailyEntryPage() {
     },
   });
 
+  const correctionMutation = useMutation({
+    mutationFn: async () => {
+      if (!isLocked) throw new Error('Corrections are for locked months');
+      if (!correctionDraft.supplierId) throw new Error('Supplier is required');
+      const requestedValue = Number(correctionDraft.requestedValue);
+      if (!Number.isFinite(requestedValue) || requestedValue < 0) {
+        throw new Error('Invalid requested value');
+      }
+      if (correctionDraft.fieldName === 'fat_pct' && requestedValue > 20) {
+        throw new Error('Quality value cannot be greater than 20');
+      }
+      if (!correctionDraft.reason.trim()) throw new Error('Reason is required');
+
+      const response = await fetch('/api/corrections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yearMonth,
+          supplierId: correctionDraft.supplierId,
+          entryDate: toDate(year, month, correctionDraft.day),
+          fieldName: correctionDraft.fieldName,
+          requestedValue,
+          reason: correctionDraft.reason,
+        }),
+      });
+
+      if (!response.ok) throw await responseError(response, 'Failed to submit correction request');
+      return response.json();
+    },
+    onSuccess: async () => {
+      setActionError('');
+      setActionInfo(t('daily.correctionRequested'));
+      setCorrectionModalOpen(false);
+      setCorrectionDraft((prev) => ({ ...prev, requestedValue: '', reason: '' }));
+      await queryClient.invalidateQueries({ queryKey: ['corrections'] });
+    },
+    onError: (error) => {
+      setActionInfo('');
+      setActionError(error instanceof Error ? error.message : 'Failed to submit correction request');
+    },
+  });
+
   function exportXlsx() {
     const rows: (string | number)[][] = [];
     rows.push([t('daily.supplier'), ...dayNumbers.map((d) => String(d)), t('daily.total'), t('daily.avgMm')]);
@@ -419,8 +518,16 @@ export default function DailyEntryPage() {
     lockMutation.mutate(!isLocked);
   }
 
+  function moveSelectedDay(offset: number) {
+    if (!dayNumbers.length) return;
+    const currentIndex = dayNumbers.indexOf(selectedDay);
+    const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = Math.min(dayNumbers.length - 1, Math.max(0, safeCurrentIndex + offset));
+    setSelectedDay(dayNumbers[nextIndex]);
+  }
+
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div className="daily-entry-page" style={{ display: 'grid', gap: 12 }}>
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <div className="control-row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>{t('daily.title')}</h2>
@@ -484,13 +591,106 @@ export default function DailyEntryPage() {
           <button className="btn" onClick={toggleMonthLock} disabled={lockLoading || lockMutation.isPending}>
             {lockMutation.isPending ? t('common.saving') : isLocked ? t('daily.unlockMonth') : t('daily.lockMonth')}
           </button>
+          <button
+            className="btn"
+            onClick={() => setCorrectionModalOpen(true)}
+            disabled={!isLocked || suppliers.length === 0 || correctionMutation.isPending}
+          >
+            {t('daily.requestCorrection')}
+          </button>
         </div>
 
         {isLocked ? <div className="muted">{t('daily.lockedReadonly')}</div> : null}
         {actionError ? <div style={{ color: 'var(--danger)', fontSize: 13 }}>{actionError}</div> : null}
+        {actionInfo ? <div style={{ color: 'var(--primary)', fontSize: 13 }}>{actionInfo}</div> : null}
       </div>
 
-      <div className="table-wrap">
+      <div className="daily-mobile-entry">
+        <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
+          <div className="control-row" style={{ justifyContent: 'space-between' }}>
+            <div className="control-row">
+              <button className="btn" onClick={() => moveSelectedDay(-1)} disabled={selectedDay === dayNumbers[0]}>
+                ‹
+              </button>
+              <label className="muted">{t('daily.day')}</label>
+              <select className="input" value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))}>
+                {dayNumbers.map((day) => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn"
+                onClick={() => moveSelectedDay(1)}
+                disabled={dayNumbers.length === 0 || selectedDay === dayNumbers[dayNumbers.length - 1]}
+              >
+                ›
+              </button>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              {t('daily.dayTotal')}: <strong>{(colTotals[selectedDay] ?? 0).toFixed(2)}</strong>
+            </div>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            {t('daily.mobileHint')}
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 0 }}>
+          {isLoading ? (
+            <div style={{ padding: 12 }} className="muted">
+              {t('common.loading')}
+            </div>
+          ) : suppliers.length === 0 ? (
+            <div style={{ padding: 12 }} className="muted">
+              {t('daily.noSuppliers')}
+            </div>
+          ) : (
+            <div>
+              {suppliers.map((supplier, rowIndex) => {
+                const cellKey = `${supplier.id}_${selectedDay}`;
+                const hasFat = fatMap.has(cellKey);
+                const value = changes[cellKey] ?? String(getCellValue(supplier.id, selectedDay));
+
+                return (
+                  <div key={supplier.id} className="daily-mobile-row">
+                    <div>
+                      <div className="daily-mobile-name">
+                        {supplier.first_name} {supplier.last_name}
+                      </div>
+                      <div className="daily-mobile-meta">
+                        {t('daily.total')}: {(rowTotals[supplier.id] ?? 0).toFixed(2)}
+                        {hasFat ? ` | ${t('monthly.mm')}: ${fatMap.get(cellKey)?.toFixed(1)}` : ''}
+                      </div>
+                    </div>
+
+                    <input
+                      ref={(el) => {
+                        mobileInputRefs.current[rowIndex] = el;
+                      }}
+                      className="input daily-mobile-input"
+                      value={value}
+                      disabled={editingDisabled}
+                      onChange={(e) => setCellValue(supplier.id, selectedDay, e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => onMobileInputKeyDown(e, rowIndex)}
+                    />
+
+                    <button className="btn" onClick={() => openQualityEditor(supplier)} disabled={editingDisabled}>
+                      {t('daily.editMm')}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="table-wrap daily-desktop-grid">
         <table className="data-table">
           <thead>
             <tr>
@@ -666,6 +866,117 @@ export default function DailyEntryPage() {
           </div>
         </div>
       ) : null}
+
+      {correctionModalOpen ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 20,
+          }}
+          onClick={() => {
+            if (!correctionMutation.isPending) setCorrectionModalOpen(false);
+          }}
+        >
+          <div className="card" style={{ width: 560, maxWidth: '92vw', padding: 12, display: 'grid', gap: 10 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: 0 }}>{t('daily.correctionTitle')}</h3>
+
+            <div className="control-row">
+              <label className="muted">{t('daily.supplier')}</label>
+              <select
+                className="input"
+                value={correctionDraft.supplierId}
+                onChange={(e) => setCorrectionDraft((prev) => ({ ...prev, supplierId: Number(e.target.value) }))}
+              >
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.first_name} {supplier.last_name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="muted">{t('daily.day')}</label>
+              <select
+                className="input"
+                value={correctionDraft.day}
+                onChange={(e) => setCorrectionDraft((prev) => ({ ...prev, day: Number(e.target.value) }))}
+              >
+                {dayNumbers.map((day) => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="control-row">
+              <label className="muted">{t('daily.correctionField')}</label>
+              <select
+                className="input"
+                value={correctionDraft.fieldName}
+                onChange={(e) =>
+                  setCorrectionDraft((prev) => ({
+                    ...prev,
+                    fieldName: e.target.value as 'qty' | 'fat_pct',
+                  }))
+                }
+              >
+                <option value="qty">{t('monthly.qty')}</option>
+                <option value="fat_pct">{t('monthly.mm')}</option>
+              </select>
+
+              <label className="muted">{t('daily.correctionCurrentValue')}</label>
+              <input
+                className="input"
+                value={
+                  correctionDraft.fieldName === 'qty'
+                    ? String(getCellValue(correctionDraft.supplierId, correctionDraft.day))
+                    : String(fatMap.get(`${correctionDraft.supplierId}_${correctionDraft.day}`) ?? '')
+                }
+                disabled
+              />
+
+              <label className="muted">{t('daily.correctionNewValue')}</label>
+              <input
+                className="input"
+                type="number"
+                step={correctionDraft.fieldName === 'qty' ? '1' : '0.1'}
+                value={correctionDraft.requestedValue}
+                onChange={(e) => setCorrectionDraft((prev) => ({ ...prev, requestedValue: e.target.value }))}
+              />
+            </div>
+
+            <textarea
+              className="input"
+              style={{ minHeight: 80 }}
+              placeholder={t('daily.correctionReason')}
+              value={correctionDraft.reason}
+              onChange={(e) => setCorrectionDraft((prev) => ({ ...prev, reason: e.target.value }))}
+            />
+
+            <div className="control-row" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setCorrectionModalOpen(false)} disabled={correctionMutation.isPending}>
+                {t('common.cancel')}
+              </button>
+              <button className="btn primary" onClick={() => correctionMutation.mutate()} disabled={correctionMutation.isPending}>
+                {correctionMutation.isPending ? t('common.saving') : t('daily.correctionSubmit')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="daily-mobile-actions">
+        <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
+          {t('daily.discard')}
+        </button>
+        <button className="btn primary" onClick={() => saveMutation.mutate()} disabled={editingDisabled || saveMutation.isPending}>
+          {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
+        </button>
+      </div>
     </div>
   );
 }

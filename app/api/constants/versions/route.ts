@@ -10,7 +10,11 @@ import {
 export async function GET() {
   try {
     const data = await listCalculationConstantVersions();
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 400 });

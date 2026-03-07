@@ -15,7 +15,11 @@ export async function GET(request: Request) {
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, startMonth));
     const data = await getQuarterlySummaries({ year, quarter, constants });
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 400 });

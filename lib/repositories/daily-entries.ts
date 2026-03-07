@@ -41,6 +41,24 @@ export async function upsertDailyEntry(payload: {
   fat_pct?: number | null;
 }): Promise<DailyEntry> {
   await assertDailyIntakeUnlockedForDate(payload.date);
+  return upsertDailyEntryUnchecked(payload);
+}
+
+export async function upsertDailyEntryIgnoringLock(payload: {
+  date: string;
+  supplierId: number;
+  qty?: number;
+  fat_pct?: number | null;
+}): Promise<DailyEntry> {
+  return upsertDailyEntryUnchecked(payload);
+}
+
+async function upsertDailyEntryUnchecked(payload: {
+  date: string;
+  supplierId: number;
+  qty?: number;
+  fat_pct?: number | null;
+}): Promise<DailyEntry> {
   await ensureSupplierExists(payload.supplierId);
 
   const supabase = createServerSupabaseClient();

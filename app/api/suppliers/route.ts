@@ -7,7 +7,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const city = searchParams.get('city') ?? undefined;
     const data = await fetchSuppliers(city || undefined);
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

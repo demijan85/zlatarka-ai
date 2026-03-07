@@ -70,6 +70,9 @@ Open: `http://localhost:3000`
 - `/api/suppliers/reorder`
 - `/api/constants/versions`
 - `/api/constants/versions/[validFrom]`
+- `/api/audit-logs`
+- `/api/corrections`
+- `/api/corrections/[id]/review`
 - `/api/daily-entries`
 - `/api/daily-entries/[id]`
 - `/api/daily-entries/upsert`
@@ -112,6 +115,24 @@ For constants stored in DB, run:
 For audit logging, run:
 
 `v2/db/004_audit_logs.sql`
+
+For data integrity constraints (unique daily rows, qty/fat checks), run:
+
+`v2/db/005_daily_entries_integrity.sql`
+
+For correction workflow (request/approve/reject after month lock), run:
+
+`v2/db/006_correction_requests.sql`
+
+For performance indexes used by monthly/quarterly views and dashboard, run:
+
+`v2/db/007_performance_indexes.sql`
+
+## Tests
+
+Run unit tests for calculation formulas:
+
+`npm test`
 
 ## Hosting (cheap / free)
 
