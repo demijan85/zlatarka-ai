@@ -291,6 +291,135 @@ select {
   display: none;
 }
 
+.sidebar-nav {
+  display: grid;
+  gap: 16px;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-section-title {
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidebar-section-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.sidebar-link {
+  width: 100%;
+}
+
+.module-page {
+  display: grid;
+  gap: 12px;
+}
+
+.module-hero {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+}
+
+.module-hero-main,
+.module-hero-side,
+.module-form-card,
+.module-side-card {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.module-kpi-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.module-step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.module-step-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.module-link-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.module-link-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-muted) 100%);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease;
+}
+
+.module-link-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+.module-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.module-pack-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.module-field {
+  display: grid;
+  gap: 8px;
+}
+
+.module-summary-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.module-summary-stack > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.module-summary-stack span {
+  color: var(--muted);
+}
+
+.trace-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .history-layout {
   display: grid;
   gap: 12px;
@@ -483,6 +612,12 @@ select {
   }
 
   .history-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .module-hero,
+  .module-form-grid,
+  .module-pack-grid {
     grid-template-columns: 1fr;
   }
 
