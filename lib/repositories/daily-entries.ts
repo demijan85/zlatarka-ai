@@ -7,6 +7,8 @@ import {
   assertDailyIntakeUnlockedForDates,
 } from './daily-intake-locks';
 
+const PAGE_SIZE = 1000;
+
 async function ensureSupplierExists(supplierId: number): Promise<void> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from('suppliers').select('id').eq('id', supplierId).maybeSingle();
@@ -17,16 +19,26 @@ async function ensureSupplierExists(supplierId: number): Promise<void> {
 export async function getDailyEntriesForMonth(year: number, month: number): Promise<DailyEntry[]> {
   const supabase = createServerSupabaseClient();
   const { startDate, endDate } = getMonthBounds(year, month);
+  const allEntries: DailyEntry[] = [];
 
-  const { data, error } = await supabase
-    .from('daily_entries')
-    .select('*, supplier:suppliers!inner(*)')
-    .gte('date', startDate)
-    .lte('date', endDate);
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('daily_entries')
+      .select('*, supplier:suppliers!inner(*)')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true })
+      .order('supplier_id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (error) throw new Error(`Failed to fetch daily entries: ${error.message}`);
+    if (error) throw new Error(`Failed to fetch daily entries: ${error.message}`);
 
-  return ((data ?? []) as DailyEntry[]).sort((a, b) => {
+    const page = (data ?? []) as DailyEntry[];
+    allEntries.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+
+  return allEntries.sort((a, b) => {
     const leftOrder = a.supplier?.order_index ?? Number.MAX_SAFE_INTEGER;
     const rightOrder = b.supplier?.order_index ?? Number.MAX_SAFE_INTEGER;
     if (leftOrder !== rightOrder) return leftOrder - rightOrder;
