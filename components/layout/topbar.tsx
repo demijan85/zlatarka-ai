@@ -1,7 +1,7 @@
 'use client';
 
 import { LogOut } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import type { Language } from '@/lib/i18n/dictionaries';
 import { useI18nStore } from '@/lib/i18n/store';
@@ -12,10 +12,14 @@ import { Menu } from 'lucide-react';
 
 export function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { t, language } = useTranslation();
   const setLanguage = useI18nStore((state) => state.setLanguage);
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
+  const isProduction = pathname.startsWith('/production');
+  const moduleLabel = isProduction ? t('topbar.productionModule') : t('topbar.purchaseModule');
+  const moduleHint = isProduction ? t('topbar.productionHint') : t('topbar.purchaseHint');
 
   async function onLogout() {
     const supabase = createBrowserSupabaseClient();
@@ -45,9 +49,12 @@ export function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
         <button className="btn mobile-menu-btn" onClick={onMenuToggle} aria-label={t('nav.toggle')}>
           <Menu size={16} />
         </button>
-        <strong>{t('app.title')}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <strong>{t('app.title')}</strong>
+          <span className="badge">{moduleLabel}</span>
+        </div>
         <div className="muted" style={{ fontSize: 12 }}>
-          {t('app.subtitle')}
+          {moduleHint}
         </div>
       </div>
 

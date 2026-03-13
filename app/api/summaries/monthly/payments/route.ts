@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { buildPaymentsXml, encodePaymentsXml } from '@/lib/exports/payments-xml';
 import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
-import { escapeXml } from '@/lib/utils/xml';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 
-function pad(value: number) {
-  return String(value).padStart(2, '0');
-}
+function parseSupplierIds(searchParams: URLSearchParams): number[] {
+  const rawValues = [...searchParams.getAll('supplierId')];
+  const csv = searchParams.get('supplierIds');
+  if (csv) rawValues.push(...csv.split(','));
 
-function formatDateTime(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes()
-  )}:${pad(date.getSeconds())}`;
+  return [...new Set(rawValues.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))];
 }
 
 export async function GET(request: Request) {
@@ -25,44 +22,23 @@ export async function GET(request: Request) {
     const month = parseMonth(searchParams.get('month'), now.getMonth() + 1);
     const period = normalizePeriod(searchParams.get('period'));
     const city = searchParams.get('city') || undefined;
+    const supplierIds = parseSupplierIds(searchParams);
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
     const summaries = await getMonthlySummaries({ year, month, city, period, constants });
+    const filtered = summaries.filter((row) => {
+      if (!Number.isFinite(row.totalAmount) || row.totalAmount <= 0) return false;
+      if (!row.bankAccount?.trim()) return false;
+      if (!supplierIds.length) return true;
+      return supplierIds.includes(row.supplierId);
+    });
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<pmtorderrq>\n`;
-    const due = formatDateTime(new Date());
+    const xml = buildPaymentsXml(filtered, new Date());
+    const payload = encodePaymentsXml(xml);
 
-    for (const row of summaries) {
-      xml += `  <pmtorder>\n`;
-      xml += `    <companyinfo>\n`;
-      xml += `      <name>ZLATARKA DOO</name>\n`;
-      xml += `      <city>KOMARANI BB,31320, NOVA VAROS</city>\n`;
-      xml += `    </companyinfo>\n`;
-
-      xml += `    <payeecompanyinfo>\n`;
-      xml += `      <name>${escapeXml(`${row.lastName} ${row.firstName}`)}</name>\n`;
-      xml += `      <city>${escapeXml(`${row.city ?? ''}, ${row.street ?? ''}`)}</city>\n`;
-      xml += `    </payeecompanyinfo>\n`;
-
-      xml += `    <payeeaccountinfo>\n`;
-      xml += `      <acctid>${escapeXml(row.bankAccount ?? '')}</acctid>\n`;
-      xml += `    </payeeaccountinfo>\n`;
-
-      xml += `    <trntype>ibank.payment.pp3</trntype>\n`;
-      xml += `    <trnuid>${crypto.randomUUID()}</trnuid>\n`;
-      xml += `    <dtdue>${due}</dtdue>\n`;
-      xml += `    <trnamt>${row.totalAmount.toFixed(2)}</trnamt>\n`;
-      xml += `    <purpose>Promet robe i usluga - medjufazna potrosnja</purpose>\n`;
-      xml += `    <purposecode>220</purposecode>\n`;
-      xml += `    <curdef>RSD</curdef>\n`;
-      xml += `  </pmtorder>\n`;
-    }
-
-    xml += `</pmtorderrq>`;
-
-    return new NextResponse(xml, {
+    return new NextResponse(new Blob([payload], { type: 'application/xml; charset=utf-16le' }), {
       headers: {
-        'Content-Type': 'application/xml',
+        'Content-Type': 'application/xml; charset=utf-16le',
         'Content-Disposition': 'attachment; filename="payments.xml"',
       },
     });

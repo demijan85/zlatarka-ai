@@ -8,13 +8,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  ClipboardList,
   Factory,
   FileClock,
   History,
   LayoutDashboard,
+  Package,
   Settings,
   Truck,
   Users,
+  Workflow,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -33,16 +36,35 @@ export function Sidebar({
   const pathname = usePathname();
   const { t } = useTranslation();
 
-  const navItems = [
-    { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
-    { href: '/daily-entry', label: t('nav.daily'), icon: Truck },
-    { href: '/monthly-view', label: t('nav.monthly'), icon: CalendarDays },
-    { href: '/supplier-history', label: t('nav.producerHistory'), icon: History },
-    { href: '/quarterly-view', label: t('nav.quarterly'), icon: BarChart3 },
-    { href: '/corrections', label: t('nav.corrections'), icon: ClipboardCheck },
-    { href: '/audit-logs', label: t('nav.auditLogs'), icon: FileClock },
-    { href: '/suppliers', label: t('nav.suppliers'), icon: Users },
-    { href: '/settings', label: t('nav.constants'), icon: Settings },
+  const navSections = [
+    {
+      title: t('nav.sectionPurchase'),
+      items: [
+        { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+        { href: '/daily-entry', label: t('nav.daily'), icon: Truck },
+        { href: '/monthly-view', label: t('nav.monthly'), icon: CalendarDays },
+        { href: '/supplier-history', label: t('nav.producerHistory'), icon: History },
+        { href: '/quarterly-view', label: t('nav.quarterly'), icon: BarChart3 },
+      ],
+    },
+    {
+      title: t('nav.sectionPurchaseAdmin'),
+      items: [
+        { href: '/corrections', label: t('nav.corrections'), icon: ClipboardCheck },
+        { href: '/suppliers', label: t('nav.suppliers'), icon: Users },
+        { href: '/settings', label: t('nav.constants'), icon: Settings },
+        { href: '/audit-logs', label: t('nav.auditLogs'), icon: FileClock },
+      ],
+    },
+    {
+      title: t('nav.sectionProduction'),
+      items: [
+        { href: '/production/dashboard', label: t('nav.productionDashboard'), icon: LayoutDashboard },
+        { href: '/production/daily-entry', label: t('nav.productionEntry'), icon: ClipboardList },
+        { href: '/production/reports', label: t('nav.productionReports'), icon: Package },
+        { href: '/production/traceability', label: t('nav.traceability'), icon: Workflow },
+      ],
+    },
   ];
 
   return (
@@ -70,29 +92,37 @@ export function Sidebar({
         </button>
       </div>
 
-      <nav style={{ display: 'grid', gap: 8 }}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
+      <nav className="sidebar-nav">
+        {navSections.map((section) => (
+          <div key={section.title} className="sidebar-section">
+            {!collapsed ? <div className="sidebar-section-title">{section.title}</div> : <div className="sidebar-section-divider" />}
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onCloseMobile}
-              className={clsx('btn', { primary: active })}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                justifyContent: collapsed ? 'center' : 'flex-start',
-              }}
-            >
-              <Icon size={16} />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
+            <div style={{ display: 'grid', gap: 8 }}>
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onCloseMobile}
+                    className={clsx('btn sidebar-link', { primary: active })}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                    }}
+                  >
+                    <Icon size={16} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );
