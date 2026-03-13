@@ -36,6 +36,7 @@ export type MonthlySummaryRow = {
   lastName: string;
   city: string | null;
   street: string | null;
+  zipCode: string | null;
   jmbg: string | null;
   bankAccount: string | null;
   qty: number;

@@ -23,6 +23,7 @@ function calculateMonthlyRow(
     lastName: supplier.last_name,
     city: supplier.city,
     street: supplier.street,
+    zipCode: supplier.zip_code,
     jmbg: supplier.jmbg,
     bankAccount: supplier.bank_account,
     qty,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { MonthlySummaryRow, Supplier } from '@/types/domain';
 import {
@@ -60,6 +60,8 @@ export default function MonthlyViewPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [city, setCity] = useState('');
   const [period, setPeriod] = useState<Period>('all');
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
+  const [showExportSelection, setShowExportSelection] = useState(false);
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['monthly', year, month, city, period],
@@ -76,6 +78,12 @@ export default function MonthlyViewPage() {
   const totalQty = rows.reduce((sum, item) => sum + item.qty, 0);
   const alignCenter = { textAlign: 'center' as const };
   const alignRight = { textAlign: 'right' as const };
+  const exportableRows = useMemo(
+    () => rows.filter((row) => Number.isFinite(row.totalAmount) && row.totalAmount > 0 && Boolean(row.bankAccount?.trim())),
+    [rows]
+  );
+  const allExportableSelected =
+    exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
 
   const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
   const orderedVersions = useMemo(
@@ -87,13 +95,34 @@ export default function MonthlyViewPage() {
     [orderedVersions, currentYearMonth]
   );
 
+  useEffect(() => {
+    setSelectedSupplierIds((current) => {
+      const exportableIds = exportableRows.map((row) => row.supplierId);
+      const exportableSet = new Set(exportableIds);
+      const preserved = current.filter((id) => exportableSet.has(id));
+      return preserved.length ? preserved : exportableIds;
+    });
+  }, [exportableRows]);
+
   function openExport(path: string, fileName: string) {
+    const exportIds = exportableRows
+      .filter((row) => selectedSupplierIds.includes(row.supplierId))
+      .map((row) => row.supplierId);
+
+    if (path.includes('/payments') && exportIds.length === 0) {
+      alert(t('monthly.noSelectedPayments'));
+      return;
+    }
+
     const params = new URLSearchParams({
       year: String(year),
       month: String(month),
       city,
       period,
     });
+    if (path.includes('/payments')) {
+      exportIds.forEach((id) => params.append('supplierId', String(id)));
+    }
 
     fetch(`${path}?${params.toString()}`)
       .then(async (response) => {
@@ -162,6 +191,73 @@ export default function MonthlyViewPage() {
           <button className="btn" onClick={() => openExport('/api/summaries/monthly/payments', `payments_${year}_${month}.xml`)}>
             {t('monthly.exportPayments')}
           </button>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button className="btn" type="button" onClick={() => setShowExportSelection((value) => !value)}>
+            {showExportSelection ? t('monthly.hideExportSelection') : t('monthly.showExportSelection')}
+          </button>
+
+          {showExportSelection ? (
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: 10,
+                display: 'grid',
+                gap: 8,
+                maxHeight: 260,
+                overflow: 'auto',
+              }}
+            >
+              <div className="muted" style={{ fontSize: 12 }}>
+                {t('monthly.exportSelectionHint')}
+              </div>
+
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={allExportableSelected}
+                  onChange={(e) =>
+                    setSelectedSupplierIds(e.target.checked ? exportableRows.map((row) => row.supplierId) : [])
+                  }
+                />
+                <span>{t('monthly.selectAllExportable')}</span>
+              </label>
+
+              {exportableRows.length === 0 ? (
+                <div className="muted">{t('monthly.noExportableSuppliers')}</div>
+              ) : (
+                exportableRows.map((row) => {
+                  const checked = selectedSupplierIds.includes(row.supplierId);
+                  return (
+                    <label
+                      key={row.supplierId}
+                      style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}
+                    >
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setSelectedSupplierIds((current) =>
+                              e.target.checked
+                                ? [...current, row.supplierId]
+                                : current.filter((id) => id !== row.supplierId)
+                            )
+                          }
+                        />
+                        <span>
+                          {row.lastName} {row.firstName}
+                        </span>
+                      </span>
+                      <strong>{row.totalAmount.toFixed(2)}</strong>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
