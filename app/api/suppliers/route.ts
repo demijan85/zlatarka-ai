@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const data = await fetchSuppliers(city || undefined);
     return NextResponse.json(data, {
       headers: {
-        'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error) {

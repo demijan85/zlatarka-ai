@@ -9,17 +9,20 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { ThemeName } from '@/lib/theme/store';
 import { useThemeStore } from '@/lib/theme/store';
 import { Menu } from 'lucide-react';
+import { useNavigationGuard } from './navigation-guard';
 
 export function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const { t, language } = useTranslation();
+  const { requestNavigation } = useNavigationGuard();
   const setLanguage = useI18nStore((state) => state.setLanguage);
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
   const isProduction = pathname.startsWith('/production');
-  const moduleLabel = isProduction ? t('topbar.productionModule') : t('topbar.purchaseModule');
-  const moduleHint = isProduction ? t('topbar.productionHint') : t('topbar.purchaseHint');
+  const isSales = pathname.startsWith('/sales');
+  const moduleLabel = isProduction ? t('topbar.productionModule') : isSales ? t('topbar.salesModule') : t('topbar.purchaseModule');
+  const moduleHint = isProduction ? t('topbar.productionHint') : isSales ? t('topbar.salesHint') : t('topbar.purchaseHint');
 
   async function onLogout() {
     const supabase = createBrowserSupabaseClient();
@@ -88,7 +91,12 @@ export function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
           <option value="en">{t('lang.en')}</option>
         </select>
 
-        <button className="btn" onClick={onLogout}>
+        <button
+          className="btn"
+          onClick={() => {
+            requestNavigation(onLogout);
+          }}
+        >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <LogOut size={14} /> {t('auth.logout')}
           </span>

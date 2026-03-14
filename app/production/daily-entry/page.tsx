@@ -1,86 +1,227 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { PeriodToolbar } from '@/components/production/period-toolbar';
+import { fetchIntakeSnapshotsForMonth, findSnapshot } from '@/lib/production/intake';
+import { useProductionStore } from '@/lib/production/store';
+import { buildDate, buildProductionRows, formatNumber } from '@/lib/production/utils';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import type { PackagingRecord, ProductionOutput, ProductionRecord } from '@/types/production';
 
-function parseNumber(value: string): number {
-  const normalized = Number(value.replace(',', '.'));
-  return Number.isFinite(normalized) ? normalized : 0;
+function createDraft(date: string, outputs: ProductionOutput[], packaging: PackagingRecord[], averageFatUnit: number | null): ProductionRecord {
+  return {
+    date,
+    carryoverMilkLiters: 0,
+    milkWasteLiters: 0,
+    averageFatUnit,
+    note: '',
+    outputs,
+    packaging,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function mergeDraft(
+  date: string,
+  outputs: ProductionOutput[],
+  packaging: PackagingRecord[],
+  averageFatUnit: number | null,
+  savedRecord: ProductionRecord | null
+): ProductionRecord {
+  if (!savedRecord) return createDraft(date, outputs, packaging, averageFatUnit);
+
+  return {
+    ...savedRecord,
+    date,
+    averageFatUnit: savedRecord.averageFatUnit ?? averageFatUnit,
+    outputs,
+    packaging,
+  };
 }
 
 export default function ProductionDailyEntryPage() {
+  const now = new Date();
   const { t } = useTranslation();
-  const [milkReceived, setMilkReceived] = useState('4850');
-  const [cheeseProduced, setCheeseProduced] = useState('612');
-  const [fatUnit, setFatUnit] = useState('3.74');
-  const [pack5kg, setPack5kg] = useState('40');
-  const [pack1kg, setPack1kg] = useState('160');
-  const [pack300g, setPack300g] = useState('290');
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [day, setDay] = useState(now.getDate());
+  const products = useProductionStore((state) => state.products);
+  const packagingDefinitions = useProductionStore((state) => state.packaging);
+  const records = useProductionStore((state) => state.records);
+  const upsertRecord = useProductionStore((state) => state.upsertRecord);
 
-  const milkValue = parseNumber(milkReceived);
-  const cheeseValue = parseNumber(cheeseProduced);
-  const pack5Value = parseNumber(pack5kg);
-  const pack1Value = parseNumber(pack1kg);
-  const pack300Value = parseNumber(pack300g);
+  const selectedDate = buildDate(year, month, day);
+  const savedRecord = records[selectedDate] ?? null;
 
-  const avgMilkForKg = useMemo(() => (cheeseValue > 0 ? milkValue / cheeseValue : 0), [cheeseValue, milkValue]);
-  const packedKg = useMemo(() => pack5Value * 5 + pack1Value + pack300Value * 0.3, [pack1Value, pack300Value, pack5Value]);
-  const remainingKg = useMemo(() => Math.max(cheeseValue - packedKg, 0), [cheeseValue, packedKg]);
+  const { data: snapshots = [], isLoading } = useQuery({
+    queryKey: ['production-intake-day', year, month],
+    queryFn: () => fetchIntakeSnapshotsForMonth(year, month),
+  });
 
-  function formatNumber(value: number, digits = 0): string {
-    return value.toLocaleString('sr-RS', {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    });
+  const snapshot = useMemo(() => findSnapshot(snapshots, selectedDate), [selectedDate, snapshots]);
+  const rowModel = useMemo(() => buildProductionRows(products, packagingDefinitions, savedRecord), [packagingDefinitions, products, savedRecord]);
+
+  const [draft, setDraft] = useState<ProductionRecord>(() =>
+    mergeDraft(
+      selectedDate,
+      rowModel.outputs.map((item) => item.output),
+      rowModel.packaging.map((item) => item.row),
+      snapshot.averageFatUnit,
+      savedRecord
+    )
+  );
+
+  useEffect(() => {
+    const maxDay = new Date(year, month, 0).getDate();
+    if (day > maxDay) {
+      setDay(maxDay);
+    }
+  }, [day, month, year]);
+
+  useEffect(() => {
+    setDraft(
+      mergeDraft(
+        selectedDate,
+        rowModel.outputs.map((item) => item.output),
+        rowModel.packaging.map((item) => item.row),
+        snapshot.averageFatUnit,
+        savedRecord
+      )
+    );
+  }, [rowModel, savedRecord, selectedDate, snapshot.averageFatUnit]);
+
+  const processedMilkLiters = draft.outputs.reduce((sum, item) => sum + item.milkUsedLiters, 0);
+  const producedKg = draft.outputs.reduce((sum, item) => sum + item.producedKg, 0);
+  const productionWasteKg = draft.outputs.reduce((sum, item) => sum + item.wasteKg, 0);
+  const packedKg = draft.packaging.reduce((sum, item) => {
+    const definition = packagingDefinitions.find((packaging) => packaging.id === item.packagingId);
+    return sum + (definition ? definition.unitWeightKg * item.packedCount : 0);
+  }, 0);
+  const milkBalance = snapshot.milkReceivedLiters - processedMilkLiters - draft.carryoverMilkLiters - draft.milkWasteLiters;
+  const openStockKg = Math.max(producedKg - packedKg - productionWasteKg, 0);
+  const averageYield = producedKg > 0 ? processedMilkLiters / producedKg : null;
+
+  function updateOutput(productId: string, patch: Partial<ProductionOutput>) {
+    setDraft((current) => ({
+      ...current,
+      outputs: current.outputs.map((item) => (item.productId === productId ? { ...item, ...patch } : item)),
+    }));
+  }
+
+  function updatePackaging(packagingId: string, patch: Partial<PackagingRecord>) {
+    setDraft((current) => ({
+      ...current,
+      packaging: current.packaging.map((item) => (item.packagingId === packagingId ? { ...item, ...patch } : item)),
+    }));
+  }
+
+  function saveRecord() {
+    upsertRecord(draft);
   }
 
   return (
     <div className="module-page">
-      <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>{t('productionEntry.title')}</h2>
-        <div className="muted">{t('productionEntry.subtitle')}</div>
-        <span className="badge">{t('productionEntry.prototype')}</span>
+      <div className="card module-hero-main">
+        <div className="production-header-row">
+          <div style={{ display: 'grid', gap: 6 }}>
+            <h2 style={{ margin: 0 }}>{t('productionEntry.title')}</h2>
+            <div className="muted">{t('productionEntry.subtitle')}</div>
+          </div>
+          <button className="btn primary" type="button" onClick={saveRecord}>
+            {t('productionEntry.saveDay')}
+          </button>
+        </div>
+
+        <PeriodToolbar
+          period="day"
+          year={year}
+          month={month}
+          day={day}
+          disablePeriodChange
+          onPeriodChange={() => undefined}
+          onYearChange={setYear}
+          onMonthChange={setMonth}
+          onDayChange={setDay}
+          labels={{
+            period: t('daily.period'),
+            year: t('daily.year'),
+            month: t('daily.month'),
+            day: t('daily.day'),
+            dayOption: t('production.periodDay'),
+            weekOption: t('production.periodWeek'),
+            monthOption: t('production.periodMonth'),
+            yearOption: t('production.periodYear'),
+          }}
+        />
       </div>
 
       <div className="module-hero">
         <div className="card module-form-card">
+          <div className="production-header-row">
+            <strong>{t('productionEntry.intakeSnapshot')}</strong>
+            <span className="badge">{selectedDate}</span>
+          </div>
+          <div className="production-subgrid">
+            <div className="production-inline-card">
+              <div className="muted">{t('productionEntry.milkReceived')}</div>
+              <strong>{isLoading ? t('common.loading') : `${formatNumber(snapshot.milkReceivedLiters, 0)} L`}</strong>
+            </div>
+            <div className="production-inline-card">
+              <div className="muted">{t('productionEntry.avgFatUnit')}</div>
+              <strong>{snapshot.averageFatUnit !== null ? formatNumber(snapshot.averageFatUnit, 2) : '-'}</strong>
+            </div>
+            <div className="production-inline-card">
+              <div className="muted">{t('productionEntry.suppliersCount')}</div>
+              <strong>{snapshot.supplierCount}</strong>
+            </div>
+          </div>
+
           <div className="module-form-grid">
             <label className="module-field">
-              <span>{t('productionEntry.milkReceived')}</span>
-              <input className="input" value={milkReceived} onChange={(event) => setMilkReceived(event.target.value)} />
+              <span>{t('productionEntry.carryoverMilk')}</span>
+              <input
+                className="input"
+                type="number"
+                value={draft.carryoverMilkLiters}
+                onChange={(event) => setDraft((current) => ({ ...current, carryoverMilkLiters: Number(event.target.value) || 0 }))}
+              />
             </label>
-
             <label className="module-field">
-              <span>{t('productionEntry.cheeseProduced')}</span>
-              <input className="input" value={cheeseProduced} onChange={(event) => setCheeseProduced(event.target.value)} />
+              <span>{t('productionEntry.milkWaste')}</span>
+              <input
+                className="input"
+                type="number"
+                value={draft.milkWasteLiters}
+                onChange={(event) => setDraft((current) => ({ ...current, milkWasteLiters: Number(event.target.value) || 0 }))}
+              />
             </label>
-
             <label className="module-field">
-              <span>{t('productionEntry.avgMilkForKg')}</span>
-              <input className="input" value={formatNumber(avgMilkForKg, 2)} readOnly />
-            </label>
-
-            <label className="module-field">
-              <span>
-                {t('productionEntry.avgFatUnit')} <small className="muted">({t('productionEntry.optional')})</small>
-              </span>
-              <input className="input" value={fatUnit} onChange={(event) => setFatUnit(event.target.value)} />
+              <span>{t('productionEntry.avgFatUnit')}</span>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={draft.averageFatUnit ?? ''}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    averageFatUnit: event.target.value === '' ? null : Number(event.target.value),
+                  }))
+                }
+              />
             </label>
           </div>
         </div>
 
         <div className="card module-side-card">
           <div className="muted" style={{ fontSize: 12 }}>
-            {t('productionEntry.traceability')}
+            {t('productionEntry.dayClosure')}
           </div>
           <div className="module-summary-stack">
             <div>
-              <span>{t('productionEntry.milkReceived')}</span>
-              <strong>{`${formatNumber(milkValue, 0)} L`}</strong>
-            </div>
-            <div>
-              <span>{t('productionEntry.cheeseProduced')}</span>
-              <strong>{`${formatNumber(cheeseValue, 0)} kg`}</strong>
+              <span>{t('productionEntry.intakeBalance')}</span>
+              <strong>{`${formatNumber(milkBalance, 1)} L`}</strong>
             </div>
             <div>
               <span>{t('productionEntry.packedKg')}</span>
@@ -88,51 +229,124 @@ export default function ProductionDailyEntryPage() {
             </div>
             <div>
               <span>{t('productionEntry.remainingKg')}</span>
-              <strong>{`${formatNumber(remainingKg, 1)} kg`}</strong>
+              <strong>{`${formatNumber(openStockKg, 1)} kg`}</strong>
+            </div>
+            <div>
+              <span>{t('productionEntry.avgMilkForKg')}</span>
+              <strong>{averageYield !== null ? `${formatNumber(averageYield, 2)} L/kg` : '-'}</strong>
             </div>
           </div>
-          <div className="muted">{t('productionEntry.traceabilityText')}</div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
-        <h3 style={{ margin: 0 }}>{t('productionEntry.packaging')}</h3>
-        <div className="module-form-grid module-pack-grid">
-          <label className="module-field">
-            <span>{t('productionEntry.package5kg')}</span>
-            <input className="input" value={pack5kg} onChange={(event) => setPack5kg(event.target.value)} />
-            <small className="muted">{t('productionEntry.packageCount')}</small>
-          </label>
+      <div className="card module-form-card">
+        <div className="production-header-row">
+          <strong>{t('productionEntry.processingOutputs')}</strong>
+          <span className="muted">{t('productionEntry.liveIntake')}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t('productionEntry.product')}</th>
+                <th>{t('productionEntry.milkUsed')}</th>
+                <th>{t('productionEntry.cheeseProduced')}</th>
+                <th>{t('productionEntry.wasteKg')}</th>
+                <th>{t('productionEntry.avgMilkForKg')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.outputs.map((item) => {
+                const product = products.find((productItem) => productItem.id === item.productId);
+                const yieldValue = item.producedKg > 0 ? item.milkUsedLiters / item.producedKg : null;
 
-          <label className="module-field">
-            <span>{t('productionEntry.package1kg')}</span>
-            <input className="input" value={pack1kg} onChange={(event) => setPack1kg(event.target.value)} />
-            <small className="muted">{t('productionEntry.packageCount')}</small>
-          </label>
+                return (
+                  <tr key={item.productId}>
+                    <td>{product?.name ?? item.productId}</td>
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        value={item.milkUsedLiters}
+                        onChange={(event) => updateOutput(item.productId, { milkUsedLiters: Number(event.target.value) || 0 })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        step="0.1"
+                        value={item.producedKg}
+                        onChange={(event) => updateOutput(item.productId, { producedKg: Number(event.target.value) || 0 })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        step="0.1"
+                        value={item.wasteKg}
+                        onChange={(event) => updateOutput(item.productId, { wasteKg: Number(event.target.value) || 0 })}
+                      />
+                    </td>
+                    <td>{yieldValue !== null ? `${formatNumber(yieldValue, 2)} L/kg` : '-'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-          <label className="module-field">
-            <span>{t('productionEntry.package300g')}</span>
-            <input className="input" value={pack300g} onChange={(event) => setPack300g(event.target.value)} />
-            <small className="muted">{t('productionEntry.packageCount')}</small>
-          </label>
+      <div className="card module-form-card">
+        <div className="production-header-row">
+          <strong>{t('productionEntry.packaging')}</strong>
+          <span className="muted">{t('productionEntry.traceability')}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t('productionProducts.packageLabel')}</th>
+                <th>{t('productionEntry.unitWeight')}</th>
+                <th>{t('productionEntry.packageCount')}</th>
+                <th>{t('productionEntry.packedKg')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.packaging.map((item) => {
+                const definition = packagingDefinitions.find((packaging) => packaging.id === item.packagingId);
+                const totalKg = (definition?.unitWeightKg ?? 0) * item.packedCount;
+
+                return (
+                  <tr key={item.packagingId}>
+                    <td>{definition?.label ?? item.packagingId}</td>
+                    <td>{definition ? `${formatNumber(definition.unitWeightKg, 1)} kg` : '-'}</td>
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        value={item.packedCount}
+                        onChange={(event) => updatePackaging(item.packagingId, { packedCount: Number(event.target.value) || 0 })}
+                      />
+                    </td>
+                    <td>{`${formatNumber(totalKg, 1)} kg`}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
-        <div className="module-kpi-grid">
-          <div className="card" style={{ padding: 14 }}>
-            <div className="muted">{t('productionEntry.packedKg')}</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{`${formatNumber(packedKg, 1)} kg`}</div>
-          </div>
-          <div className="card" style={{ padding: 14 }}>
-            <div className="muted">{t('productionEntry.remainingKg')}</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{`${formatNumber(remainingKg, 1)} kg`}</div>
-          </div>
-          <div className="card" style={{ padding: 14 }}>
-            <div className="muted">{t('productionEntry.avgFatUnit')}</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{fatUnit || '-'}</div>
-          </div>
-        </div>
-
-        <div className="muted">{t('productionEntry.saveConcept')}</div>
+        <label className="module-field">
+          <span>{t('productionEntry.productionNote')}</span>
+          <textarea
+            className="input"
+            style={{ minHeight: 88 }}
+            value={draft.note}
+            onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+          />
+        </label>
       </div>
     </div>
   );

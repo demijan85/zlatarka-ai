@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test --experimental-strip-types tests/**/*.test.ts"
+    "test": "node --test --experimental-strip-types tests/**/*.test.ts",
+    "generate:sjenica-import": "node scripts/generate-sjenica-jan-feb-import.mjs",
+    "generate:sjenica-import:fixed": "node scripts/generate-sjenica-jan-feb-import.mjs --mode fixed-ids --sql /Users/dejanpopovic/Projects/dp/zl/zlatarka-next-master/db/generated/sjenica_jan_feb_2026_daily_entries_fixed_ids.sql --json /Users/dejanpopovic/Projects/dp/zl/zlatarka-next-master/db/generated/sjenica_jan_feb_2026_preview_fixed_ids.json"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
