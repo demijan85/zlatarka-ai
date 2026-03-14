@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import type { Supplier, SupplierHistory } from '@/types/domain';
@@ -35,7 +35,7 @@ async function fetchSupplierHistory(supplierId: number, year: number): Promise<S
   return response.json();
 }
 
-export default function SupplierHistoryPage() {
+function SupplierHistoryContent() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const searchParams = useSearchParams();
@@ -399,5 +399,13 @@ export default function SupplierHistoryPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+export default function SupplierHistoryPage() {
+  return (
+    <Suspense fallback={<div className="card" style={{ padding: 16 }}>Loading...</div>}>
+      <SupplierHistoryContent />
+    </Suspense>
   );
 }
