@@ -13,6 +13,7 @@ export type Supplier = {
   country: string | null;
   zip_code: string | null;
   number_of_cows: number | null;
+  hidden_in_daily_entry: boolean;
 };
 
 export type DailyEntry = {
