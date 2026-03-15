@@ -100,7 +100,7 @@ export async function getMonthlySummaries(options: {
       if (!supplierEntries.length) return null;
       return calculateMonthlyRow(serial++, supplier, supplierEntries, constants);
     })
-    .filter((item): item is MonthlySummaryRow => item !== null && item.qty > 0);
+    .filter((item): item is MonthlySummaryRow => item !== null && Number.isFinite(item.qty) && item.qty > 0);
 }
 
 export async function getQuarterlySummaries(options: {

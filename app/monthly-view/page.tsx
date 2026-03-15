@@ -74,13 +74,20 @@ export default function MonthlyViewPage() {
     queryFn: fetchConstantVersions,
   });
 
-  const totalAmount = rows.reduce((sum, item) => sum + item.totalAmount, 0);
-  const totalQty = rows.reduce((sum, item) => sum + item.qty, 0);
+  const visibleRows = useMemo(
+    () => rows.filter((row) => Number.isFinite(row.qty) && row.qty > 0),
+    [rows]
+  );
+  const totalAmount = visibleRows.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalQty = visibleRows.reduce((sum, item) => sum + item.qty, 0);
   const alignCenter = { textAlign: 'center' as const };
   const alignRight = { textAlign: 'right' as const };
   const exportableRows = useMemo(
-    () => rows.filter((row) => Number.isFinite(row.totalAmount) && row.totalAmount > 0 && Boolean(row.bankAccount?.trim())),
-    [rows]
+    () =>
+      visibleRows.filter(
+        (row) => Number.isFinite(row.totalAmount) && row.totalAmount > 0 && Boolean(row.bankAccount?.trim())
+      ),
+    [visibleRows]
   );
   const allExportableSelected =
     exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
@@ -289,12 +296,12 @@ export default function MonthlyViewPage() {
                   {(error as Error).message}
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={11}>{t('monthly.noData')}</td>
               </tr>
             ) : (
-              rows.map((row) => (
+              visibleRows.map((row) => (
                 <tr key={row.supplierId}>
                   <td style={alignCenter}>{row.serialNum}</td>
                   <td>{row.lastName}</td>
@@ -310,7 +317,7 @@ export default function MonthlyViewPage() {
                 </tr>
               ))
             )}
-            {rows.length > 0 ? (
+            {visibleRows.length > 0 ? (
               <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                 <td colSpan={3}>{t('table.totals')}</td>
                 <td style={alignRight}>{totalQty.toFixed(0)}</td>
