@@ -113,6 +113,7 @@ Glavne funkcionalnosti:
 
 - filteri po godini, mesecu, periodu i gradu
 - prikaz agregiranih podataka po proizvodjacu
+- proizvodjaci sa kolicinom `0` se ne prikazuju u tabeli niti ulaze u mesecne izvoze
 - koriscenje parametara obracuna koji vaze za konkretan mesec
 - izvoz pregleda u XLSX
 - generisanje priznanica u PDF formatu

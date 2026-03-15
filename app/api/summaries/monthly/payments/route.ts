@@ -25,7 +25,9 @@ export async function GET(request: Request) {
     const supplierIds = parseSupplierIds(searchParams);
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
-    const summaries = await getMonthlySummaries({ year, month, city, period, constants });
+    const summaries = (await getMonthlySummaries({ year, month, city, period, constants })).filter(
+      (row) => Number.isFinite(row.qty) && row.qty > 0
+    );
     const filtered = summaries.filter((row) => {
       if (!Number.isFinite(row.totalAmount) || row.totalAmount <= 0) return false;
       if (!row.bankAccount?.trim()) return false;

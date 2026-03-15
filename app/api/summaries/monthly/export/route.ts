@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     const city = searchParams.get('city') || undefined;
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
-    const summaries = await getMonthlySummaries({ year, month, city, period, constants });
+    const summaries = (await getMonthlySummaries({ year, month, city, period, constants })).filter(
+      (row) => Number.isFinite(row.qty) && row.qty > 0
+    );
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Monthly Summary');
