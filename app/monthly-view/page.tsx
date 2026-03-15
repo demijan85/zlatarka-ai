@@ -11,9 +11,13 @@ import {
 } from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
+import { getMonthlyExportFileName } from '@/lib/utils/export-file-names';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 
 type Period = 'first' | 'second' | 'all';
+const EMPTY_ROWS: MonthlySummaryRow[] = [];
+const EMPTY_CITIES: string[] = [];
+const EMPTY_VERSIONS: VersionedCalculationConstants[] = [];
 
 async function parseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -63,13 +67,13 @@ export default function MonthlyViewPage() {
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
   const [showExportSelection, setShowExportSelection] = useState(false);
 
-  const { data: rows = [], isLoading, error } = useQuery({
+  const { data: rows = EMPTY_ROWS, isLoading, error } = useQuery({
     queryKey: ['monthly', year, month, city, period],
     queryFn: () => fetchMonthly(year, month, city, period),
   });
 
-  const { data: cities = [] } = useQuery({ queryKey: ['supplier-cities'], queryFn: fetchCities });
-  const { data: versionsData = [] } = useQuery({
+  const { data: cities = EMPTY_CITIES } = useQuery({ queryKey: ['supplier-cities'], queryFn: fetchCities });
+  const { data: versionsData = EMPTY_VERSIONS } = useQuery({
     queryKey: ['constants-versions'],
     queryFn: fetchConstantVersions,
   });
@@ -107,7 +111,13 @@ export default function MonthlyViewPage() {
       const exportableIds = exportableRows.map((row) => row.supplierId);
       const exportableSet = new Set(exportableIds);
       const preserved = current.filter((id) => exportableSet.has(id));
-      return preserved.length ? preserved : exportableIds;
+      const next = preserved.length ? preserved : exportableIds;
+
+      if (current.length === next.length && current.every((id, index) => id === next[index])) {
+        return current;
+      }
+
+      return next;
     });
   }, [exportableRows]);
 
@@ -126,6 +136,7 @@ export default function MonthlyViewPage() {
       month: String(month),
       city,
       period,
+      lang: language,
     });
     if (path.includes('/payments')) {
       exportIds.forEach((id) => params.append('supplierId', String(id)));
@@ -189,13 +200,31 @@ export default function MonthlyViewPage() {
             ))}
           </select>
 
-          <button className="btn" onClick={() => openExport('/api/summaries/monthly/export', `monthly_summary_${year}_${month}.xlsx`)}>
+          <button
+            className="btn"
+            onClick={() =>
+              openExport('/api/summaries/monthly/export', getMonthlyExportFileName('summary', year, month, language, period))
+            }
+          >
             {t('monthly.exportSummary')}
           </button>
-          <button className="btn" onClick={() => openExport('/api/summaries/monthly/receipts/pdf', `monthly_receipts_${year}_${month}.pdf`)}>
+          <button
+            className="btn"
+            onClick={() =>
+              openExport(
+                '/api/summaries/monthly/receipts/pdf',
+                getMonthlyExportFileName('receipts', year, month, language, period)
+              )
+            }
+          >
             {t('monthly.exportReceiptsPdf')}
           </button>
-          <button className="btn" onClick={() => openExport('/api/summaries/monthly/payments', `payments_${year}_${month}.xml`)}>
+          <button
+            className="btn"
+            onClick={() =>
+              openExport('/api/summaries/monthly/payments', getMonthlyExportFileName('payments', year, month, language, period))
+            }
+          >
             {t('monthly.exportPayments')}
           </button>
         </div>

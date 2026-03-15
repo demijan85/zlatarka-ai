@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supplierSchema } from '@/lib/schemas/suppliers';
-import { createSupplier, fetchSuppliers } from '@/lib/repositories/suppliers';
+import { createSupplier, DuplicateSupplierNameError, fetchSuppliers } from '@/lib/repositories/suppliers';
 
 export async function GET(request: Request) {
   try {
@@ -25,6 +25,12 @@ export async function POST(request: Request) {
     const data = await createSupplier(parsed);
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
+    if (error instanceof DuplicateSupplierNameError) {
+      return NextResponse.json(
+        { error: error.message, duplicateSupplier: error.duplicateSupplier },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 400 });
   }

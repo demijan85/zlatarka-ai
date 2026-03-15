@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import type { MonthlySummaryRow } from '@/types/domain';
+import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
 import { yearMonthFrom } from '@/lib/utils/year-month';
@@ -321,6 +322,7 @@ export async function GET(request: Request) {
     const month = parseMonth(searchParams.get('month'), now.getMonth() + 1);
     const period = normalizePeriod(searchParams.get('period'));
     const city = searchParams.get('city') || undefined;
+    const language = normalizeExportLanguage(searchParams.get('lang'));
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
     const summaries = (await getMonthlySummaries({ year, month, city, period, constants })).filter(
@@ -353,7 +355,7 @@ export async function GET(request: Request) {
     return new NextResponse(pdfBody, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="monthly_receipts_${year}_${month}.pdf"`,
+        'Content-Disposition': `attachment; filename="${getMonthlyExportFileName('receipts', year, month, language, period)}"`,
       },
     });
   } catch (error) {

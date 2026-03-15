@@ -101,6 +101,12 @@ const srCyrl: Dictionary = {
   'suppliers.hiddenInDailyEntry': 'Сакривен',
   'suppliers.missingValue': 'Недостаје',
   'suppliers.missingFieldsTooltip': 'Недостају подаци',
+  'suppliers.duplicateTitle': 'Постојећи произвођач',
+  'suppliers.duplicateExists': 'Произвођач са истим именом и презименом већ постоји.',
+  'suppliers.duplicateHiddenExists':
+    'Произвођач са истим именом и презименом већ постоји, али је сакривен. Да ли желите да га поново активирате?',
+  'suppliers.activateExisting': 'Активирај постојећег',
+  'suppliers.reactivated': 'Постојећи произвођач је поново активиран.',
 
   'supplierForm.order': 'Редослед',
   'supplierForm.firstName': 'Име',
@@ -186,6 +192,10 @@ const srCyrl: Dictionary = {
   'daily.hideSupplier': 'Сакриј',
   'daily.hideSupplierTitle': 'Сакрити произвођача из дневног уноса',
   'daily.hideSupplierMessage': 'Остаће видљив у месецима где већ има унос и можете га касније вратити кроз додатне произвођаче.',
+  'daily.hideSupplierDeleteTitle': 'Сакрити произвођача и обрисати уносе',
+  'daily.hideSupplierDeleteMessage':
+    'За изабрани месец већ постоје уноси различити од нуле. Ако наставите, сви уноси за овај месец биће обрисани из базе, а произвођач ће бити сакривен.',
+  'daily.hideSupplierDeleteConfirm': 'Обриши и сакриј',
   'daily.showSupplier': 'Укључи',
   'daily.hiddenBadge': 'Сакривен',
   'daily.supplierHidden': 'Произвођач је сакривен из нових дневних уноса.',
@@ -590,6 +600,12 @@ const en: Dictionary = {
   'suppliers.hiddenInDailyEntry': 'Hidden',
   'suppliers.missingValue': 'Missing',
   'suppliers.missingFieldsTooltip': 'Missing data',
+  'suppliers.duplicateTitle': 'Existing supplier',
+  'suppliers.duplicateExists': 'A supplier with the same first and last name already exists.',
+  'suppliers.duplicateHiddenExists':
+    'A supplier with the same first and last name already exists, but is hidden. Do you want to activate it again?',
+  'suppliers.activateExisting': 'Activate existing',
+  'suppliers.reactivated': 'The existing supplier has been activated again.',
 
   'supplierForm.order': 'Order',
   'supplierForm.firstName': 'First name',
@@ -672,6 +688,10 @@ const en: Dictionary = {
   'daily.importFatSuccess': 'Fat units imported.',
   'daily.importFatTooltip': 'Import source',
   'daily.importFatTargetPart': 'Target month part',
+  'daily.hideSupplierDeleteTitle': 'Hide producer and delete entries',
+  'daily.hideSupplierDeleteMessage':
+    'There are already non-zero entries for the selected month. If you continue, all entries for this month will be deleted from the database and the producer will be hidden.',
+  'daily.hideSupplierDeleteConfirm': 'Delete and hide',
   'daily.hideSupplier': 'Hide',
   'daily.hideSupplierTitle': 'Hide producer from daily entry',
   'daily.hideSupplierMessage': 'The producer stays visible in months with existing entries and can be restored later from additional producers.',
