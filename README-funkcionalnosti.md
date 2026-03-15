@@ -81,12 +81,13 @@ Uvoz mm:
 Rad sa aktivnim i neaktivnim proizvodjacima:
 
 - proizvodjac moze biti sakriven iz novog dnevnog unosa
-- sakriveni proizvodjaci se ne prikazuju u novim mesecima bez aktivnosti
+- sakriveni proizvodjaci se ne prikazuju u novim mesecima bez stvarne aktivnosti
 - ako vec imaju unos u posmatranom mesecu, ostaju vidljivi zbog istorije
 - kroz dijalog `Dodatni proizvodjaci` mogu ponovo da se ukljuce
 - klik na ime proizvodjaca otvara mali akcioni popup:
   - `Detalji`
   - `Sakrij` ili `Ukljuci`
+- ako za izabrani mesec ima unose razlicite od nule, sakrivanje trazi potvrdu i brise te unose iz baze pre sakrivanja
 
 Zakljucavanje meseca:
 
@@ -116,6 +117,9 @@ Glavne funkcionalnosti:
 - proizvodjaci sa kolicinom `0` se ne prikazuju u tabeli niti ulaze u mesecne izvoze
 - koriscenje parametara obracuna koji vaze za konkretan mesec
 - izvoz pregleda u XLSX
+- XLSX izvoz je pripremljen za stampu na A4 po sirini
+- nazivi eksportovanih fajlova prate izabrani jezik, a srpski naziv je u latinici
+- ako je izabran samo prvi ili drugi deo meseca, taj period ulazi i u naziv fajla
 - generisanje priznanica u PDF formatu
 - generisanje XML fajla za placanja
 - izbor samo odredjenih proizvodjaca za placanja i izvoz
@@ -172,6 +176,8 @@ Glavne funkcionalnosti:
 
 - dodavanje novog dobavljaca
 - izmena postojeceg dobavljaca
+- validacija da ne mogu da postoje dva proizvodjaca sa istim imenom i prezimenom
+- ako takav proizvodjac vec postoji ali je sakriven, korisniku se nudi da ga ponovo aktivira umesto pravljenja duplikata
 - brisanje dobavljaca
 - pomeranje redosleda gore/dole
 - automatsko postavljanje `order_index` na poslednje mesto pri kreiranju
