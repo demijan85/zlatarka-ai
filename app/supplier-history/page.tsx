@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import type { Supplier, SupplierHistory } from '@/types/domain';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -34,13 +35,20 @@ async function fetchSupplierHistory(supplierId: number, year: number): Promise<S
   return response.json();
 }
 
-export default function SupplierHistoryPage() {
+function SupplierHistoryContent() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
+  const searchParams = useSearchParams();
   const { t, language } = useTranslation();
   const locale = localeForLanguage(language);
+  const requestedSupplierId = useMemo(() => {
+    const raw = searchParams.get('supplierId');
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
   const [year, setYear] = useState(now.getFullYear());
-  const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [supplierId, setSupplierId] = useState<number | null>(requestedSupplierId);
+  const [supplierSearch, setSupplierSearch] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const suppliersQuery = useQuery({
@@ -50,10 +58,36 @@ export default function SupplierHistoryPage() {
 
   const suppliers = useMemo(() => suppliersQuery.data ?? [], [suppliersQuery.data]);
 
+  const filteredSuppliers = useMemo(() => {
+    const term = supplierSearch.trim().toLocaleLowerCase();
+    if (!term) return suppliers;
+
+    return suppliers.filter((supplier) =>
+      `${supplier.last_name} ${supplier.first_name} ${supplier.city ?? ''}`.toLocaleLowerCase().includes(term)
+    );
+  }, [supplierSearch, suppliers]);
+
+  const supplierOptions = useMemo(() => {
+    if (supplierId === null) return filteredSuppliers;
+
+    const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+    if (!selectedSupplier) return filteredSuppliers;
+    if (filteredSuppliers.some((supplier) => supplier.id === supplierId)) return filteredSuppliers;
+
+    return [selectedSupplier, ...filteredSuppliers];
+  }, [filteredSuppliers, supplierId, suppliers]);
+
   useEffect(() => {
-    if (supplierId || !suppliers.length) return;
+    if (!suppliers.length) return;
+    if (supplierId !== null && suppliers.some((supplier) => supplier.id === supplierId)) return;
+
+    if (requestedSupplierId !== null && suppliers.some((supplier) => supplier.id === requestedSupplierId)) {
+      setSupplierId(requestedSupplierId);
+      return;
+    }
+
     setSupplierId(suppliers[0].id);
-  }, [supplierId, suppliers]);
+  }, [requestedSupplierId, supplierId, suppliers]);
 
   const historyQuery = useQuery({
     queryKey: ['supplier-history', supplierId, year],
@@ -104,13 +138,20 @@ export default function SupplierHistoryPage() {
         </div>
 
         <div className="control-row">
+          <input
+            className="input"
+            value={supplierSearch}
+            onChange={(event) => setSupplierSearch(event.target.value)}
+            placeholder={t('producerHistory.searchSupplier')}
+          />
+
           <select
             className="input"
             value={supplierId ?? ''}
             onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)}
           >
             <option value="">{t('producerHistory.selectSupplier')}</option>
-            {suppliers.map((supplier) => (
+            {supplierOptions.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>
                 {`${supplier.last_name} ${supplier.first_name}${supplier.city ? ` - ${supplier.city}` : ''}`}
               </option>
@@ -358,5 +399,13 @@ export default function SupplierHistoryPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+export default function SupplierHistoryPage() {
+  return (
+    <Suspense fallback={<div className="card" style={{ padding: 16 }}>Loading...</div>}>
+      <SupplierHistoryContent />
+    </Suspense>
   );
 }

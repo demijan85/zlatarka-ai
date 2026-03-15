@@ -10,10 +10,11 @@ export const supplierSchema = z.object({
   agriculture_number: z.string().optional().nullable(),
   bank_account: z.string().optional().nullable(),
   street: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
+  city: z.string().min(1),
   country: z.string().optional().nullable(),
   zip_code: z.string().optional().nullable(),
   number_of_cows: z.coerce.number().int().nonnegative().optional().nullable(),
+  hidden_in_daily_entry: z.boolean().optional(),
 });
 
 export const supplierUpdateSchema = supplierSchema.partial();

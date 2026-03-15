@@ -2,7 +2,11 @@
 
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Droplets, FileSpreadsheet, UserPlus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
+import { ConfirmDialog } from '@/components/layout/confirm-dialog';
+import { useNavigationGuard } from '@/components/layout/navigation-guard';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { yearMonthFrom } from '@/lib/utils/year-month';
@@ -15,6 +19,14 @@ type QualityDraftRow = {
   date: string;
   fat_pct: string;
 };
+
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  tone?: 'default' | 'danger';
+  onConfirm: () => void;
+} | null;
 
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -61,7 +73,9 @@ async function fetchLockStatus(year: number, month: number): Promise<DailyIntake
 export default function DailyEntryPage() {
   const now = new Date();
   const { t, language } = useTranslation();
+  const { setGuard, requestNavigation } = useNavigationGuard();
   const locale = localeForLanguage(language);
+  const router = useRouter();
 
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -70,6 +84,9 @@ export default function DailyEntryPage() {
   const [changes, setChanges] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState('');
   const [actionInfo, setActionInfo] = useState('');
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [hiddenSuppliersOpen, setHiddenSuppliersOpen] = useState(false);
+  const [supplierActionTarget, setSupplierActionTarget] = useState<Supplier | null>(null);
 
   const [qualitySupplier, setQualitySupplier] = useState<Supplier | null>(null);
   const [qualityRows, setQualityRows] = useState<QualityDraftRow[]>([]);
@@ -90,7 +107,7 @@ export default function DailyEntryPage() {
 
   const queryClient = useQueryClient();
 
-  const { data: suppliers = [], isLoading: suppliersLoading } = useQuery({
+  const { data: allSuppliers = [], isLoading: suppliersLoading } = useQuery({
     queryKey: ['suppliers'],
     queryFn: fetchSuppliers,
   });
@@ -138,14 +155,37 @@ export default function DailyEntryPage() {
     }
   }, [dayNumbers, selectedDay]);
 
+  const visibleSuppliers = useMemo(() => {
+    const supplierIdsWithEntries = new Set(entries.map((item) => item.supplier_id));
+    return allSuppliers.filter(
+      (supplier) => !supplier.hidden_in_daily_entry || supplierIdsWithEntries.has(supplier.id)
+    );
+  }, [allSuppliers, entries]);
+
+  const hiddenSuppliers = useMemo(
+    () => allSuppliers.filter((supplier) => supplier.hidden_in_daily_entry),
+    [allSuppliers]
+  );
+
   useEffect(() => {
-    if (!suppliers.length) return;
-    setCorrectionDraft((prev) => ({
-      ...prev,
-      supplierId: prev.supplierId > 0 ? prev.supplierId : suppliers[0].id,
-      day: dayNumbers.includes(prev.day) ? prev.day : dayNumbers[0],
-    }));
-  }, [suppliers, dayNumbers]);
+    if (!visibleSuppliers.length) return;
+    setCorrectionDraft((prev) => {
+      const nextSupplierId = visibleSuppliers.some((supplier) => supplier.id === prev.supplierId)
+        ? prev.supplierId
+        : visibleSuppliers[0].id;
+      const nextDay = dayNumbers.includes(prev.day) ? prev.day : dayNumbers[0];
+
+      if (prev.supplierId === nextSupplierId && prev.day === nextDay) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        supplierId: nextSupplierId,
+        day: nextDay,
+      };
+    });
+  }, [visibleSuppliers, dayNumbers]);
 
   const originalQtyMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -190,7 +230,7 @@ export default function DailyEntryPage() {
     const colTotals: Record<number, number> = {};
     let grand = 0;
 
-    for (const supplier of suppliers) {
+    for (const supplier of visibleSuppliers) {
       let row = 0;
       for (const day of dayNumbers) {
         const value = getCellValue(supplier.id, day);
@@ -202,7 +242,7 @@ export default function DailyEntryPage() {
     }
 
     return { rowTotals, colTotals, grandTotal: grand };
-  }, [suppliers, dayNumbers, getCellValue]);
+  }, [visibleSuppliers, dayNumbers, getCellValue]);
 
   function averageFatForSupplier(supplierId: number): string {
     const values = dayNumbers
@@ -259,6 +299,52 @@ export default function DailyEntryPage() {
     },
   });
 
+  function discardSupplierChanges(supplierId: number) {
+    setChanges((prev) => {
+      const next = { ...prev };
+      const prefix = `${supplierId}_`;
+
+      for (const key of Object.keys(next)) {
+        if (key.startsWith(prefix)) delete next[key];
+      }
+
+      return next;
+    });
+  }
+
+  const visibilityMutation = useMutation({
+    mutationFn: async ({ supplier, hidden }: { supplier: Supplier; hidden: boolean }) => {
+      const response = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden_in_daily_entry: hidden }),
+      });
+
+      if (!response.ok) {
+        throw await responseError(
+          response,
+          hidden ? 'Failed to hide supplier from daily entry' : 'Failed to restore supplier to daily entry'
+        );
+      }
+
+      return response.json() as Promise<Supplier>;
+    },
+    onSuccess: async (_data, variables) => {
+      setActionError('');
+      if (variables.hidden) {
+        discardSupplierChanges(variables.supplier.id);
+        setActionInfo(t('daily.supplierHidden'));
+      } else {
+        setActionInfo(t('daily.supplierShown'));
+      }
+      await queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+    },
+    onError: (error) => {
+      setActionInfo('');
+      setActionError(error instanceof Error ? error.message : t('daily.visibilityActionFailed'));
+    },
+  });
+
   const lockMutation = useMutation({
     mutationFn: async (nextLocked: boolean) => {
       const response = await fetch('/api/daily-entries/lock', {
@@ -289,16 +375,62 @@ export default function DailyEntryPage() {
   });
 
   const unsavedWarning = t('daily.unsavedWarning');
+  const unsavedNavigationTitle = t('daily.unsavedNavigationTitle');
+  const unsavedNavigationMessage = t('daily.unsavedNavigationMessage');
+  const saveAndLeaveLabel = t('daily.saveAndLeave');
+  const leaveWithoutSavingLabel = t('daily.leaveWithoutSaving');
+  const stayLabel = t('common.stay');
+  const hasUnsavedChanges = Object.keys(changes).length > 0 && !editingDisabled;
+  const showSaveActions = hasUnsavedChanges || saveMutation.isPending;
+
+  const saveAndContinue = useCallback(async () => {
+    if (!hasUnsavedChanges) return true;
+
+    try {
+      await saveMutation.mutateAsync();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [hasUnsavedChanges, saveMutation.mutateAsync]);
+
   useEffect(() => {
-    const hasUnsaved = Object.keys(changes).length > 0;
     const handler = (event: BeforeUnloadEvent) => {
-      if (!hasUnsaved || editingDisabled) return;
+      if (!hasUnsavedChanges) return;
       event.preventDefault();
       event.returnValue = unsavedWarning;
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [changes, unsavedWarning, editingDisabled]);
+  }, [hasUnsavedChanges, unsavedWarning]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setGuard(null);
+      return;
+    }
+
+    setGuard({
+      enabled: true,
+      title: unsavedNavigationTitle,
+      message: unsavedNavigationMessage,
+      saveLabel: saveAndLeaveLabel,
+      leaveLabel: leaveWithoutSavingLabel,
+      stayLabel,
+      onSaveAndLeave: saveAndContinue,
+    });
+
+    return () => setGuard(null);
+  }, [
+    hasUnsavedChanges,
+    leaveWithoutSavingLabel,
+    saveAndContinue,
+    saveAndLeaveLabel,
+    setGuard,
+    stayLabel,
+    unsavedNavigationMessage,
+    unsavedNavigationTitle,
+  ]);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const mobileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -312,7 +444,7 @@ export default function DailyEntryPage() {
   function onCellKeyDown(event: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
     if (editingDisabled) return;
 
-    const maxRow = suppliers.length - 1;
+    const maxRow = visibleSuppliers.length - 1;
     const maxCol = dayNumbers.length - 1;
 
     if (event.key === 'Tab' && event.shiftKey) {
@@ -366,7 +498,7 @@ export default function DailyEntryPage() {
   function onMobileInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>, row: number) {
     if (editingDisabled) return;
 
-    const maxRow = suppliers.length - 1;
+    const maxRow = visibleSuppliers.length - 1;
 
     if (event.key === 'ArrowDown' || event.key === 'Enter') {
       event.preventDefault();
@@ -483,7 +615,7 @@ export default function DailyEntryPage() {
     const rows: (string | number)[][] = [];
     rows.push([t('daily.supplier'), ...dayNumbers.map((d) => String(d)), t('daily.total'), t('daily.avgMm')]);
 
-    for (const supplier of suppliers) {
+    for (const supplier of visibleSuppliers) {
       rows.push([
         `${supplier.first_name} ${supplier.last_name}`,
         ...dayNumbers.map((d) => getCellValue(supplier.id, d)),
@@ -508,14 +640,34 @@ export default function DailyEntryPage() {
   function toggleMonthLock() {
     const hasUnsaved = Object.keys(changes).length > 0;
     if (!isLocked && hasUnsaved) {
-      const confirmedUnsaved = confirm(t('daily.confirmLockUnsaved'));
-      if (!confirmedUnsaved) return;
+      setConfirmState({
+        title: t('common.confirmAction'),
+        message: t('daily.confirmLockUnsaved'),
+        confirmLabel: t('daily.lockMonth'),
+        onConfirm: () => {
+          setConfirmState({
+            title: t('common.confirmAction'),
+            message: t('daily.confirmLock'),
+            confirmLabel: t('daily.lockMonth'),
+            onConfirm: () => {
+              setConfirmState(null);
+              lockMutation.mutate(true);
+            },
+          });
+        },
+      });
+      return;
     }
 
-    const confirmed = confirm(isLocked ? t('daily.confirmUnlock') : t('daily.confirmLock'));
-    if (!confirmed) return;
-
-    lockMutation.mutate(!isLocked);
+    setConfirmState({
+      title: t('common.confirmAction'),
+      message: isLocked ? t('daily.confirmUnlock') : t('daily.confirmLock'),
+      confirmLabel: isLocked ? t('daily.unlockMonth') : t('daily.lockMonth'),
+      onConfirm: () => {
+        setConfirmState(null);
+        lockMutation.mutate(!isLocked);
+      },
+    });
   }
 
   function moveSelectedDay(offset: number) {
@@ -560,43 +712,39 @@ export default function DailyEntryPage() {
             <option value="FULL">{t('daily.periodFull')}</option>
           </select>
 
-          <button className="btn" onClick={exportXlsx}>
-            {t('common.exportXlsx')}
-          </button>
-
-          <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
-            {t('daily.discard')}
-          </button>
-
-          <button
-            className="btn primary"
-            onClick={() => saveMutation.mutate()}
-            disabled={editingDisabled || saveMutation.isPending}
-          >
-            {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
-          </button>
-        </div>
-
-        <div className="control-row" style={{ justifyContent: 'space-between' }}>
-          <div className="control-row">
-            <span className="muted">{t('daily.lockStatus')}:</span>
-            <span className="badge" style={isLocked ? { background: '#fee2e2', color: '#b91c1c' } : undefined}>
-              {isLocked ? t('daily.locked') : t('daily.unlocked')}
-            </span>
-            <span className="muted" style={{ fontSize: 12 }}>
-              {yearMonth}
-            </span>
-          </div>
-
           <button className="btn" onClick={toggleMonthLock} disabled={lockLoading || lockMutation.isPending}>
             {lockMutation.isPending ? t('common.saving') : isLocked ? t('daily.unlockMonth') : t('daily.lockMonth')}
           </button>
-          <button
-            className="btn"
-            onClick={() => setCorrectionModalOpen(true)}
-            disabled={!isLocked || suppliers.length === 0 || correctionMutation.isPending}
-          >
-            {t('daily.requestCorrection')}
+
+          {hiddenSuppliers.length > 0 ? (
+            <button
+              className="btn"
+              onClick={() => setHiddenSuppliersOpen(true)}
+              disabled={visibilityMutation.isPending}
+              title={t('daily.hiddenSuppliersHint')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {t('daily.hiddenSuppliers')} ({hiddenSuppliers.length}) <UserPlus size={14} />
+              </span>
+            </button>
+          ) : null}
+
+          {showSaveActions ? (
+            <>
+              <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
+                {t('daily.discard')}
+              </button>
+
+              <button className="btn primary" onClick={() => saveMutation.mutate()} disabled={editingDisabled || saveMutation.isPending}>
+                {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
+              </button>
+            </>
+          ) : null}
+
+          <button className="btn" onClick={exportXlsx} aria-label={t('common.exportXlsx')} title={t('common.exportXlsx')}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {t('common.export')} <FileSpreadsheet size={14} />
+            </span>
           </button>
         </div>
 
@@ -644,13 +792,13 @@ export default function DailyEntryPage() {
             <div style={{ padding: 12 }} className="muted">
               {t('common.loading')}
             </div>
-          ) : suppliers.length === 0 ? (
+          ) : visibleSuppliers.length === 0 ? (
             <div style={{ padding: 12 }} className="muted">
               {t('daily.noSuppliers')}
             </div>
           ) : (
             <div>
-              {suppliers.map((supplier, rowIndex) => {
+              {visibleSuppliers.map((supplier, rowIndex) => {
                 const cellKey = `${supplier.id}_${selectedDay}`;
                 const hasFat = fatMap.has(cellKey);
                 const value = changes[cellKey] ?? String(getCellValue(supplier.id, selectedDay));
@@ -658,11 +806,18 @@ export default function DailyEntryPage() {
                 return (
                   <div key={supplier.id} className="daily-mobile-row">
                     <div>
-                      <div className="daily-mobile-name">
-                        {supplier.first_name} {supplier.last_name}
+                      <div className="daily-mobile-header">
+                        <button
+                          type="button"
+                          className="daily-supplier-trigger"
+                          onClick={() => setSupplierActionTarget(supplier)}
+                        >
+                          {supplier.first_name} {supplier.last_name}
+                        </button>
+                        {supplier.hidden_in_daily_entry ? <span className="badge">{t('daily.hiddenBadge')}</span> : null}
                       </div>
                       <div className="daily-mobile-meta">
-                        {t('daily.total')}: {(rowTotals[supplier.id] ?? 0).toFixed(2)}
+                        {t('daily.total')}: {Math.round(rowTotals[supplier.id] ?? 0)}
                         {hasFat ? ` | ${t('monthly.mm')}: ${fatMap.get(cellKey)?.toFixed(1)}` : ''}
                       </div>
                     </div>
@@ -691,16 +846,22 @@ export default function DailyEntryPage() {
       </div>
 
       <div className="table-wrap daily-desktop-grid">
-        <table className="data-table">
+        <table className="data-table daily-entry-table">
           <thead>
             <tr>
               <th>{t('daily.supplier')}</th>
               {dayNumbers.map((day) => (
-                <th key={day}>{day}</th>
+                <th key={day} className="daily-day-col">
+                  {day}
+                </th>
               ))}
               <th>{t('daily.total')}</th>
               <th>{t('daily.avgMm')}</th>
-              <th>{t('daily.quality')}</th>
+              <th className="daily-quality-col" title={t('daily.quality')}>
+                <span className="daily-quality-icon" aria-hidden="true">
+                  <Droplets size={14} />
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -708,15 +869,24 @@ export default function DailyEntryPage() {
               <tr>
                 <td colSpan={dayNumbers.length + 4}>{t('common.loading')}</td>
               </tr>
-            ) : suppliers.length === 0 ? (
+            ) : visibleSuppliers.length === 0 ? (
               <tr>
                 <td colSpan={dayNumbers.length + 4}>{t('daily.noSuppliers')}</td>
               </tr>
             ) : (
-              suppliers.map((supplier, rowIndex) => (
+              visibleSuppliers.map((supplier, rowIndex) => (
                 <tr key={supplier.id}>
                   <td>
-                    {supplier.first_name} {supplier.last_name}
+                    <div className="daily-supplier-cell">
+                      <button
+                        type="button"
+                        className="daily-supplier-trigger"
+                        onClick={() => setSupplierActionTarget(supplier)}
+                      >
+                        {supplier.first_name} {supplier.last_name}
+                      </button>
+                      {supplier.hidden_in_daily_entry ? <span className="badge">{t('daily.hiddenBadge')}</span> : null}
+                    </div>
                   </td>
                   {dayNumbers.map((day, colIndex) => {
                     const cellKey = `${supplier.id}_${day}`;
@@ -724,13 +894,12 @@ export default function DailyEntryPage() {
                     const value = changes[cellKey] ?? String(getCellValue(supplier.id, day));
 
                     return (
-                      <td key={day} style={{ background: hasFat ? '#fffbeb' : 'white' }}>
+                      <td key={day} className="daily-day-cell" style={{ background: hasFat ? '#fffbeb' : 'white' }}>
                         <input
                           ref={(el) => {
                             inputRefs.current[`${rowIndex}_${colIndex}`] = el;
                           }}
-                          className="input"
-                          style={{ width: 64, textAlign: 'right', padding: '6px 8px' }}
+                          className="input daily-entry-cell-input"
                           value={value}
                           disabled={editingDisabled}
                           onChange={(e) => setCellValue(supplier.id, day, e.target.value)}
@@ -745,25 +914,35 @@ export default function DailyEntryPage() {
                       </td>
                     );
                   })}
-                  <td style={{ fontWeight: 600 }}>{(rowTotals[supplier.id] ?? 0).toFixed(2)}</td>
+                  <td className="daily-total-col" style={{ fontWeight: 600 }}>
+                    {Math.round(rowTotals[supplier.id] ?? 0)}
+                  </td>
                   <td>{averageFatForSupplier(supplier.id)}</td>
-                  <td>
-                    <button className="btn" onClick={() => openQualityEditor(supplier)} disabled={editingDisabled}>
-                      {t('daily.editMm')}
+                  <td className="daily-quality-col">
+                    <button
+                      className="btn icon-btn"
+                      onClick={() => openQualityEditor(supplier)}
+                      disabled={editingDisabled}
+                      aria-label={t('daily.editMm')}
+                      title={t('daily.editMm')}
+                    >
+                      <Droplets size={14} />
                     </button>
                   </td>
                 </tr>
               ))
             )}
-            {suppliers.length > 0 ? (
+            {visibleSuppliers.length > 0 ? (
               <tr style={{ background: '#f8fafc' }}>
                 <td style={{ fontWeight: 700 }}>{t('daily.totals')}</td>
                 {dayNumbers.map((day) => (
-                  <td key={day} style={{ fontWeight: 700 }}>
-                    {(colTotals[day] ?? 0).toFixed(2)}
+                  <td key={day} style={{ fontWeight: 700, textAlign: 'center' }}>
+                    {Math.round(colTotals[day] ?? 0)}
                   </td>
                 ))}
-                <td style={{ fontWeight: 700 }}>{grandTotal.toFixed(2)}</td>
+                <td className="daily-total-col" style={{ fontWeight: 700 }}>
+                  {Math.round(grandTotal)}
+                </td>
                 <td />
                 <td />
               </tr>
@@ -891,7 +1070,7 @@ export default function DailyEntryPage() {
                 value={correctionDraft.supplierId}
                 onChange={(e) => setCorrectionDraft((prev) => ({ ...prev, supplierId: Number(e.target.value) }))}
               >
-                {suppliers.map((supplier) => (
+                {visibleSuppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.first_name} {supplier.last_name}
                   </option>
@@ -969,14 +1148,134 @@ export default function DailyEntryPage() {
         </div>
       ) : null}
 
-      <div className="daily-mobile-actions">
-        <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
-          {t('daily.discard')}
-        </button>
-        <button className="btn primary" onClick={() => saveMutation.mutate()} disabled={editingDisabled || saveMutation.isPending}>
-          {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
-        </button>
-      </div>
+      {showSaveActions ? (
+        <div className="daily-mobile-actions">
+          <button className="btn" onClick={() => setChanges({})} disabled={editingDisabled || saveMutation.isPending}>
+            {t('daily.discard')}
+          </button>
+          <button className="btn primary" onClick={() => saveMutation.mutate()} disabled={editingDisabled || saveMutation.isPending}>
+            {saveMutation.isPending ? t('daily.saving') : t('daily.saveAll')}
+          </button>
+        </div>
+      ) : null}
+
+      {hiddenSuppliersOpen ? (
+        <div className="modal-backdrop" onClick={() => !visibilityMutation.isPending && setHiddenSuppliersOpen(false)}>
+          <div className="modal-panel" style={{ width: 'min(720px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'grid', gap: 4 }}>
+                <h3 style={{ margin: 0 }}>{t('daily.hiddenSuppliers')}</h3>
+                <div className="muted">{t('daily.hiddenSuppliersHint')}</div>
+              </div>
+              <button className="btn" type="button" onClick={() => setHiddenSuppliersOpen(false)} disabled={visibilityMutation.isPending}>
+                {t('common.close')}
+              </button>
+            </div>
+
+            {hiddenSuppliers.length === 0 ? (
+              <div className="muted">{t('daily.noHiddenSuppliers')}</div>
+            ) : (
+              <div className="daily-hidden-list">
+                {hiddenSuppliers.map((supplier) => (
+                  <div key={supplier.id} className="daily-hidden-row">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="daily-supplier-name">
+                        {supplier.first_name} {supplier.last_name}
+                      </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {supplier.city ?? t('common.noData')}
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn primary"
+                      onClick={() => visibilityMutation.mutate({ supplier, hidden: false })}
+                      disabled={visibilityMutation.isPending}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {t('daily.showSupplier')} <UserPlus size={14} />
+                      </span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {supplierActionTarget ? (
+        <div className="modal-backdrop" onClick={() => !visibilityMutation.isPending && setSupplierActionTarget(null)}>
+          <div className="modal-panel" style={{ width: 'min(520px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'grid', gap: 4 }}>
+                <h3 style={{ margin: 0 }}>
+                  {supplierActionTarget.first_name} {supplierActionTarget.last_name}
+                </h3>
+                <div className="muted">
+                  {supplierActionTarget.city ?? t('common.noData')}
+                </div>
+              </div>
+              <button className="btn" type="button" onClick={() => setSupplierActionTarget(null)} disabled={visibilityMutation.isPending}>
+                {t('common.close')}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  setSupplierActionTarget(null);
+                  requestNavigation(() => {
+                    router.push(`/supplier-history?supplierId=${supplierActionTarget.id}`);
+                  });
+                }}
+              >
+                {t('daily.supplierDetails')}
+              </button>
+
+              <button
+                className={`btn${supplierActionTarget.hidden_in_daily_entry ? ' primary' : ''}`}
+                type="button"
+                onClick={() => {
+                  const target = supplierActionTarget;
+                  setSupplierActionTarget(null);
+                  if (target.hidden_in_daily_entry) {
+                    visibilityMutation.mutate({ supplier: target, hidden: false });
+                    return;
+                  }
+
+                  setConfirmState({
+                    title: t('daily.hideSupplierTitle'),
+                    message: `${target.first_name} ${target.last_name}. ${t('daily.hideSupplierMessage')}`,
+                    confirmLabel: t('daily.hideSupplier'),
+                    onConfirm: () => {
+                      setConfirmState(null);
+                      visibilityMutation.mutate({ supplier: target, hidden: true });
+                    },
+                  });
+                }}
+                disabled={visibilityMutation.isPending}
+                title={supplierActionTarget.hidden_in_daily_entry ? t('daily.hiddenSuppliersHint') : undefined}
+              >
+                {supplierActionTarget.hidden_in_daily_entry ? t('daily.showSupplier') : t('daily.hideSupplier')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel={confirmState?.confirmLabel}
+        tone={confirmState?.tone}
+        busy={lockMutation.isPending || visibilityMutation.isPending}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={() => confirmState?.onConfirm()}
+      />
     </div>
   );
 }
