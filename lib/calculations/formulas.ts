@@ -42,6 +42,42 @@ export function monthlyTotalAmount(
   };
 }
 
+export function applyMonthlySummaryOverrides(
+  qty: number,
+  fatPct: number,
+  base: {
+    pricePerFatPct: number;
+    pricePerQty: number;
+    priceWithTax: number;
+    stimulation: number;
+  },
+  taxPercentage: number,
+  overrides: {
+    priceWithTaxOverride?: number | null;
+    stimulationOverride?: number | null;
+  }
+): {
+  pricePerFatPct: number;
+  pricePerQty: number;
+  priceWithTax: number;
+  stimulation: number;
+  totalAmount: number;
+} {
+  const priceWithTax = overrides.priceWithTaxOverride ?? base.priceWithTax;
+  const pricePerQty = priceWithTax / (1 + taxPercentage / 100);
+  const pricePerFatPct = fatPct > 0 ? pricePerQty / fatPct : base.pricePerFatPct;
+  const stimulation = overrides.stimulationOverride ?? base.stimulation;
+  const totalAmount = qty * (priceWithTax + stimulation);
+
+  return {
+    pricePerFatPct,
+    pricePerQty,
+    priceWithTax,
+    stimulation,
+    totalAmount,
+  };
+}
+
 export function quarterlyTotalPremium(qty: number, premiumPerLiter: number): number {
   return qty * premiumPerLiter;
 }

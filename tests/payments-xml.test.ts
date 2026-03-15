@@ -15,12 +15,18 @@ const baseRow: MonthlySummaryRow = {
   bankAccount: '205-9001018923709-57',
   qty: 100,
   fatPct: 4.2,
+  calculatedPricePerFatPct: 0,
   pricePerFatPct: 0,
+  calculatedPricePerQty: 0,
   pricePerQty: 0,
   taxPercentage: 0,
+  calculatedPriceWithTax: 0,
   priceWithTax: 0,
+  calculatedStimulation: 0,
   stimulation: 0,
   totalAmount: 200,
+  priceWithTaxOverride: null,
+  stimulationOverride: null,
 };
 
 test('buildPaymentsXml matches expected payment structure', () => {

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyMonthlySummaryOverrides,
   average,
   monthlyTotalAmount,
   pricePerLiterByFat,
@@ -59,4 +60,29 @@ test('monthlyTotalAmount returns zero stimulation below thresholds', () => {
   assert.equal(result.priceWithTax, 51.84);
   assert.equal(result.stimulation, 0);
   assert.equal(result.totalAmount, 20736);
+});
+
+test('applyMonthlySummaryOverrides replaces effective values and recalculates total', () => {
+  const base = monthlyTotalAmount(1000, 3.5, testConstants);
+  const result = applyMonthlySummaryOverrides(
+    1000,
+    3.5,
+    {
+      pricePerFatPct: testConstants.pricePerFatPct,
+      pricePerQty: base.pricePerQty,
+      priceWithTax: base.priceWithTax,
+      stimulation: base.stimulation,
+    },
+    testConstants.taxPercentage,
+    {
+      priceWithTaxOverride: 54,
+      stimulationOverride: 3,
+    }
+  );
+
+  assert.equal(result.pricePerFatPct, 14.285714285714286);
+  assert.equal(result.pricePerQty, 50);
+  assert.equal(result.priceWithTax, 54);
+  assert.equal(result.stimulation, 3);
+  assert.equal(result.totalAmount, 57000);
 });
