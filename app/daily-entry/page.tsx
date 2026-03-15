@@ -101,6 +101,7 @@ export default function DailyEntryPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [period, setPeriod] = useState<Period>(getDefaultPeriod(now.getDate()));
+  const [cityFilter, setCityFilter] = useState('');
   const [selectedDay, setSelectedDay] = useState(now.getDate());
   const [changes, setChanges] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState('');
@@ -194,16 +195,27 @@ export default function DailyEntryPage() {
     }
   }, [dayNumbers, selectedDay]);
 
+  const availableCities = useMemo(
+    () => [...new Set(allSuppliers.map((supplier) => supplier.city).filter(Boolean))] as string[],
+    [allSuppliers]
+  );
+
   const visibleSuppliers = useMemo(() => {
     const supplierIdsWithEntries = new Set(entries.filter(hasMeaningfulEntry).map((item) => item.supplier_id));
-    return allSuppliers.filter(
-      (supplier) => !supplier.hidden_in_daily_entry || supplierIdsWithEntries.has(supplier.id)
-    );
-  }, [allSuppliers, entries]);
+    return allSuppliers.filter((supplier) => {
+      if (cityFilter && supplier.city !== cityFilter) return false;
+      return !supplier.hidden_in_daily_entry || supplierIdsWithEntries.has(supplier.id);
+    });
+  }, [allSuppliers, cityFilter, entries]);
 
   const hiddenSuppliers = useMemo(
-    () => allSuppliers.filter((supplier) => supplier.hidden_in_daily_entry),
-    [allSuppliers]
+    () =>
+      allSuppliers.filter((supplier) => {
+        if (!supplier.hidden_in_daily_entry) return false;
+        if (cityFilter && supplier.city !== cityFilter) return false;
+        return true;
+      }),
+    [allSuppliers, cityFilter]
   );
 
   const filteredHiddenSuppliers = useMemo(() => {
@@ -905,6 +917,16 @@ export default function DailyEntryPage() {
             <option value="FULL">{t('daily.periodFull')}</option>
           </select>
 
+          <label className="muted">{t('suppliers.city')}</label>
+          <select className="input" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+            <option value="">{t('common.allCities')}</option>
+            {availableCities.map((city) => (
+              <option key={city} value={city}>
+                {city}
+              </option>
+            ))}
+          </select>
+
           <button className="btn" onClick={toggleMonthLock} disabled={lockLoading || lockMutation.isPending}>
             {lockMutation.isPending ? t('common.saving') : isLocked ? t('daily.unlockMonth') : t('daily.lockMonth')}
           </button>
@@ -1019,7 +1041,6 @@ export default function DailyEntryPage() {
                         >
                           {supplier.first_name} {supplier.last_name}
                         </button>
-                        {supplier.hidden_in_daily_entry ? <span className="badge">{t('daily.hiddenBadge')}</span> : null}
                       </div>
                       <div className="daily-mobile-meta">
                         {t('daily.total')}: {Math.round(rowTotals[supplier.id] ?? 0)}
@@ -1090,7 +1111,6 @@ export default function DailyEntryPage() {
                       >
                         {supplier.first_name} {supplier.last_name}
                       </button>
-                      {supplier.hidden_in_daily_entry ? <span className="badge">{t('daily.hiddenBadge')}</span> : null}
                     </div>
                   </td>
                   {dayNumbers.map((day, colIndex) => {
