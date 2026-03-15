@@ -42,12 +42,26 @@ export type MonthlySummaryRow = {
   bankAccount: string | null;
   qty: number;
   fatPct: number;
+  calculatedPricePerFatPct: number;
   pricePerFatPct: number;
+  calculatedPricePerQty: number;
   pricePerQty: number;
   taxPercentage: number;
+  calculatedPriceWithTax: number;
   priceWithTax: number;
+  calculatedStimulation: number;
   stimulation: number;
   totalAmount: number;
+  priceWithTaxOverride: number | null;
+  stimulationOverride: number | null;
+};
+
+export type MonthlySummaryOverride = {
+  supplierId: number;
+  yearMonth: string;
+  period: 'all' | 'first' | 'second';
+  priceWithTaxOverride: number | null;
+  stimulationOverride: number | null;
 };
 
 export type QuarterlySummaryRow = {

@@ -184,6 +184,18 @@ textarea {
   transform: translateY(0);
 }
 
+.monthly-override-cell {
+  position: relative;
+  background: color-mix(in srgb, rgba(181, 110, 28, 0.12) 70%, var(--surface-strong));
+  font-weight: 700;
+  cursor: help;
+}
+
+.monthly-override-cell:hover .monthly-override-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .data-table th {
   position: sticky;
   top: 0;

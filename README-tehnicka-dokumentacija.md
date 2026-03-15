@@ -374,6 +374,9 @@ Postojece SQL skripte:
 - `008_update_supplier_bank_accounts_from_komitenti.sql`
 - `009_supplier_daily_entry_visibility.sql`
 - `010_fix_suppliers_id_sequence.sql`
+- `011_monthly_summary_overrides.sql`
+- `012_monthly_summary_overrides_price_with_tax.sql`
+- `013_monthly_summary_overrides_recreate.sql`
 
 Svrha migracija:
 
@@ -385,6 +388,9 @@ Svrha migracija:
 - performance indeksi
 - vidljivost dobavljaca u dnevnom unosu
 - popravka sekvence za `suppliers.id`
+- DB-backed override vrednosti za mesecni pregled po `year_month + period + supplier`
+- migracija sa override-a `cena po kolicini` na override `cena sa PDV`, uz preracun izvedenih cena
+- cista recreate skripta za `monthly_summary_overrides` ako se stara tabela brise rucno
 
 Napomena:
 

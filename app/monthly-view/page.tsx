@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type FocusEvent, type MouseEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MonthlySummaryRow, Supplier } from '@/types/domain';
 import {
   defaultVersionedConstants,
@@ -37,7 +37,7 @@ async function fetchMonthly(year: number, month: number, city: string, period: P
     period,
   });
 
-  const response = await fetch(`/api/summaries/monthly?${params.toString()}`);
+  const response = await fetch(`/api/summaries/monthly?${params.toString()}`, { cache: 'no-store' });
   if (!response.ok) throw await parseError(response, 'Failed to fetch monthly summaries');
   return response.json();
 }
@@ -59,6 +59,7 @@ export default function MonthlyViewPage() {
   const now = new Date();
   const { t, language } = useTranslation();
   const locale = localeForLanguage(language);
+  const queryClient = useQueryClient();
 
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -66,6 +67,12 @@ export default function MonthlyViewPage() {
   const [period, setPeriod] = useState<Period>('all');
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
   const [showExportSelection, setShowExportSelection] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [overrideSupplierId, setOverrideSupplierId] = useState<number | null>(null);
+  const [overrideDraft, setOverrideDraft] = useState({
+    priceWithTax: '',
+    stimulation: '',
+  });
 
   const { data: rows = EMPTY_ROWS, isLoading, error } = useQuery({
     queryKey: ['monthly', year, month, city, period],
@@ -97,6 +104,10 @@ export default function MonthlyViewPage() {
     exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
 
   const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
+  const overrideTarget = useMemo(
+    () => visibleRows.find((row) => row.supplierId === overrideSupplierId) ?? null,
+    [overrideSupplierId, visibleRows]
+  );
   const orderedVersions = useMemo(
     () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
     [versionsData]
@@ -105,6 +116,36 @@ export default function MonthlyViewPage() {
     () => getEffectiveConstantsForPeriod(orderedVersions, currentYearMonth),
     [orderedVersions, currentYearMonth]
   );
+
+  const overrideMutation = useMutation({
+    mutationFn: async (payload: { supplierId: number; priceWithTaxOverride: number | null; stimulationOverride: number | null }) => {
+      const response = await fetch('/api/summaries/monthly/overrides', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yearMonth: currentYearMonth,
+          period,
+          supplierId: payload.supplierId,
+          priceWithTaxOverride: payload.priceWithTaxOverride,
+          stimulationOverride: payload.stimulationOverride,
+        }),
+      });
+      if (!response.ok) throw await parseError(response, 'Failed to save monthly overrides');
+      return response.json();
+    },
+    onSuccess: async () => {
+      setActionError('');
+      await queryClient.refetchQueries({
+        queryKey: ['monthly', year, month, city, period],
+        exact: true,
+      });
+      setOverrideSupplierId(null);
+      setOverrideDraft({ priceWithTax: '', stimulation: '' });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : 'Failed to save monthly overrides');
+    },
+  });
 
   useEffect(() => {
     setSelectedSupplierIds((current) => {
@@ -120,6 +161,37 @@ export default function MonthlyViewPage() {
       return next;
     });
   }, [exportableRows]);
+
+  useEffect(() => {
+    if (overrideSupplierId === null) return;
+    if (visibleRows.some((row) => row.supplierId === overrideSupplierId)) return;
+    setOverrideSupplierId(null);
+    setOverrideDraft({ priceWithTax: '', stimulation: '' });
+  }, [overrideSupplierId, visibleRows]);
+
+  function openOverrideModal(row: MonthlySummaryRow) {
+    setOverrideSupplierId(row.supplierId);
+    setOverrideDraft({
+      priceWithTax: row.priceWithTaxOverride !== null ? row.priceWithTaxOverride.toFixed(2) : '',
+      stimulation: row.stimulationOverride !== null ? row.stimulationOverride.toFixed(2) : '',
+    });
+  }
+
+  function normalizeOverride(value: string, calculatedValue: number): number | null {
+    if (!value.trim()) return null;
+    const normalized = value.replace(',', '.').trim();
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Math.abs(parsed - calculatedValue) < 0.000001 ? null : parsed;
+  }
+
+  function buildOverrideTooltip(label: string, calculatedValue: number, effectiveValue: number): string {
+    return `${label}: ${t('monthly.overrideCalculated')} ${calculatedValue.toFixed(2)} | ${t('monthly.overrideSet')} ${effectiveValue.toFixed(2)}`;
+  }
+
+  function selectFieldContent(event: FocusEvent<HTMLInputElement> | MouseEvent<HTMLInputElement>) {
+    event.currentTarget.select();
+  }
 
   function openExport(path: string, fileName: string) {
     const exportIds = exportableRows
@@ -162,6 +234,12 @@ export default function MonthlyViewPage() {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {actionError ? (
+        <div className="card" style={{ padding: 12, color: 'var(--danger)' }}>
+          {actionError}
+        </div>
+      ) : null}
+
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0 }}>{t('monthly.title')}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
@@ -312,22 +390,23 @@ export default function MonthlyViewPage() {
               <th style={alignRight}>{t('monthly.priceTax')}</th>
               <th style={alignCenter}>{t('monthly.stimulation')}</th>
               <th style={alignRight}>{t('monthly.totalAmount')}</th>
+              <th style={alignCenter}>{t('monthly.overrideAction')}</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={11}>{t('common.loading')}</td>
+                <td colSpan={12}>{t('common.loading')}</td>
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan={11} style={{ color: 'var(--danger)' }}>
+                <td colSpan={12} style={{ color: 'var(--danger)' }}>
                   {(error as Error).message}
                 </td>
               </tr>
             ) : visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={11}>{t('monthly.noData')}</td>
+                <td colSpan={12}>{t('monthly.noData')}</td>
               </tr>
             ) : (
               visibleRows.map((row) => (
@@ -337,12 +416,57 @@ export default function MonthlyViewPage() {
                   <td>{row.firstName}</td>
                   <td style={alignRight}>{row.qty.toFixed(0)}</td>
                   <td style={alignCenter}>{row.fatPct.toFixed(2)}</td>
-                  <td style={alignRight}>{row.pricePerFatPct.toFixed(2)}</td>
-                  <td style={alignRight}>{row.pricePerQty.toFixed(2)}</td>
+                  <td
+                    style={alignRight}
+                    className={row.priceWithTaxOverride !== null ? 'monthly-override-cell' : undefined}
+                  >
+                    {row.pricePerFatPct.toFixed(2)}
+                    {row.priceWithTaxOverride !== null ? (
+                      <div className="supplier-row-tooltip monthly-override-tooltip">
+                        {buildOverrideTooltip(t('monthly.priceMm'), row.calculatedPricePerFatPct, row.pricePerFatPct)}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td
+                    style={alignRight}
+                    className={row.priceWithTaxOverride !== null ? 'monthly-override-cell' : undefined}
+                  >
+                    {row.pricePerQty.toFixed(2)}
+                    {row.priceWithTaxOverride !== null ? (
+                      <div className="supplier-row-tooltip monthly-override-tooltip">
+                        {buildOverrideTooltip(t('monthly.priceQty'), row.calculatedPricePerQty, row.pricePerQty)}
+                      </div>
+                    ) : null}
+                  </td>
                   <td style={alignCenter}>{row.taxPercentage.toFixed(2)}</td>
-                  <td style={alignRight}>{row.priceWithTax.toFixed(2)}</td>
-                  <td style={alignCenter}>{row.stimulation.toFixed(2)}</td>
+                  <td
+                    style={alignRight}
+                    className={row.priceWithTaxOverride !== null ? 'monthly-override-cell' : undefined}
+                  >
+                    {row.priceWithTax.toFixed(2)}
+                    {row.priceWithTaxOverride !== null ? (
+                      <div className="supplier-row-tooltip monthly-override-tooltip">
+                        {buildOverrideTooltip(t('monthly.priceTax'), row.calculatedPriceWithTax, row.priceWithTax)}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td
+                    style={alignCenter}
+                    className={row.stimulationOverride !== null ? 'monthly-override-cell' : undefined}
+                  >
+                    {row.stimulation.toFixed(2)}
+                    {row.stimulationOverride !== null ? (
+                      <div className="supplier-row-tooltip monthly-override-tooltip">
+                        {buildOverrideTooltip(t('monthly.stimulation'), row.calculatedStimulation, row.stimulation)}
+                      </div>
+                    ) : null}
+                  </td>
                   <td style={alignRight}>{row.totalAmount.toFixed(2)}</td>
+                  <td style={alignCenter}>
+                    <button className="btn" type="button" onClick={() => openOverrideModal(row)}>
+                      {t('common.edit')}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -352,11 +476,100 @@ export default function MonthlyViewPage() {
                 <td style={alignRight}>{totalQty.toFixed(0)}</td>
                 <td colSpan={6} />
                 <td style={alignRight}>{totalAmount.toFixed(2)}</td>
+                <td />
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
+
+      {overrideTarget ? (
+        <div className="modal-backdrop" onClick={() => !overrideMutation.isPending && setOverrideSupplierId(null)}>
+          <div className="modal-panel" style={{ width: 'min(520px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'grid', gap: 4 }}>
+                <h3 style={{ margin: 0 }}>{t('monthly.overrideTitle')}</h3>
+                <div className="muted">{`${overrideTarget.lastName} ${overrideTarget.firstName}`}</div>
+              </div>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setOverrideSupplierId(null)}
+                disabled={overrideMutation.isPending}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {t('monthly.overrideHint')}
+              </div>
+
+              <div className="supplier-form-grid supplier-form-grid-2">
+                <label className="module-field">
+                  <span className="field-label">{t('monthly.priceTax')}</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    value={overrideDraft.priceWithTax}
+                    placeholder={overrideTarget.calculatedPriceWithTax.toFixed(2)}
+                    onChange={(event) => setOverrideDraft((current) => ({ ...current, priceWithTax: event.target.value }))}
+                    onFocus={selectFieldContent}
+                    onClick={selectFieldContent}
+                  />
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {`${t('monthly.overrideCalculated')}: ${overrideTarget.calculatedPriceWithTax.toFixed(2)}`}
+                  </span>
+                </label>
+
+                <label className="module-field">
+                  <span className="field-label">{t('monthly.stimulation')}</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    value={overrideDraft.stimulation}
+                    placeholder={overrideTarget.calculatedStimulation.toFixed(2)}
+                    onChange={(event) => setOverrideDraft((current) => ({ ...current, stimulation: event.target.value }))}
+                    onFocus={selectFieldContent}
+                    onClick={selectFieldContent}
+                  />
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {`${t('monthly.overrideCalculated')}: ${overrideTarget.calculatedStimulation.toFixed(2)}`}
+                  </span>
+                </label>
+              </div>
+
+              <div className="control-row" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setOverrideSupplierId(null)}
+                  disabled={overrideMutation.isPending}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  className="btn primary"
+                  type="button"
+                  onClick={() =>
+                    overrideMutation.mutate({
+                      supplierId: overrideTarget.supplierId,
+                      priceWithTaxOverride: normalizeOverride(overrideDraft.priceWithTax, overrideTarget.calculatedPriceWithTax),
+                      stimulationOverride: normalizeOverride(overrideDraft.stimulation, overrideTarget.calculatedStimulation),
+                    })
+                  }
+                  disabled={overrideMutation.isPending}
+                >
+                  {overrideMutation.isPending ? t('common.saving') : t('monthly.overrideSave')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

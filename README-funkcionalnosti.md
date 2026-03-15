@@ -52,6 +52,7 @@ Glavne funkcionalnosti:
   - `1-15`
   - `16-kraj`
   - `Ceo mesec`
+- filter po gradu
 - tabela po proizvodjacu i danima
 - unos dnevne kolicine po celiji
 - prikaz prosecnog mm po proizvodjacu
@@ -115,6 +116,9 @@ Glavne funkcionalnosti:
 - filteri po godini, mesecu, periodu i gradu
 - prikaz agregiranih podataka po proizvodjacu
 - proizvodjaci sa kolicinom `0` se ne prikazuju u tabeli niti ulaze u mesecne izvoze
+- mogucnost rucnog override-a za `cena sa PDV` i `stimulacija` po proizvodjacu, mesecu i izabranom periodu
+- kada se promeni `cena sa PDV`, automatski se preracunaju `cena po kolicini` i `cena po mm`
+- override vrednosti se vizuelno isticu i imaju tooltip sa izracunatom i podesnom vrednoscu
 - koriscenje parametara obracuna koji vaze za konkretan mesec
 - izvoz pregleda u XLSX
 - XLSX izvoz je pripremljen za stampu na A4 po sirini
