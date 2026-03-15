@@ -103,8 +103,8 @@ Fajl:
 
 Posle uspesne prijave postavljaju se cookie vrednosti:
 
-- `app_session=1`
-- `app_user=<email ili identifikator>`
+- Supabase auth cookie-i koje `@supabase/ssr` koristi za stvarnu sesiju
+- `app_user=<email ili identifikator>` za audit identitet
 
 ### 4.2 Middleware
 
@@ -116,12 +116,14 @@ Middleware:
 
 - propusta `/login`
 - propusta `/_next`, `/api` i favicon
-- za sve ostale rute proverava prisustvo `app_session` cookie-ja
-- ako cookie ne postoji, radi redirect na `/login`
+- kroz `@supabase/ssr` cita i osvezava stvarnu Supabase sesiju iz cookie-ja
+- za sve ostale rute proverava prijavljenog korisnika preko `supabase.auth.getUser()`
+- ako korisnik ne postoji, radi redirect na `/login`
+- usput odrzava `app_user` cookie za audit logove
 
 Napomena:
 
-- ovo je jednostavan session gate
+- UI vise ne zavisi od rucno upisanog `app_session` cookie-ja
 - nema sofisticiran RBAC ili permissions model
 - API rute nisu blokirane middleware-om zato sto middleware namerno preskace `/api`
 
@@ -151,8 +153,9 @@ Server klijent koristi anon key i radi bez persisted session-a:
 
 Tehnicka posledica:
 
-- repository sloj ne koristi poseban user-bound Supabase session
-- identitet korisnika za audit se cita iz `app_user` cookie-ja, ne iz Supabase server session-a
+- middleware koristi stvarnu Supabase browser sesiju za zastitu stranica
+- repository sloj i dalje ne koristi poseban user-bound Supabase session za upite ka bazi
+- identitet korisnika za audit se cita iz `app_user` cookie-ja, koji middleware sinhronizuje sa prijavljenim korisnikom
 
 ## 6. Modul otkupa - tehnicki detalji
 
