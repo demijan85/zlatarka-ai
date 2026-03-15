@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "verify": "npm run build && npx tsc --noEmit --allowImportingTsExtensions && npm test",
     "start": "next start",
     "lint": "eslint .",
     "test": "node --test --experimental-strip-types tests/**/*.test.ts",

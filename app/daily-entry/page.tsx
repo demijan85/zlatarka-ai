@@ -20,6 +20,16 @@ type QualityDraftRow = {
   fat_pct: string;
 };
 
+type FatImportRow = {
+  supplierId: number;
+  supplierName: string;
+  sourceDate: string;
+  targetDate: string;
+  fat_pct: string;
+  include: boolean;
+  hasCurrentFat: boolean;
+};
+
 type ConfirmState = {
   title: string;
   message: string;
@@ -27,6 +37,13 @@ type ConfirmState = {
   tone?: 'default' | 'danger';
   onConfirm: () => void;
 } | null;
+
+type FatImportConfig = {
+  rows: FatImportRow[];
+  sourceLabel: string;
+  targetLabel: string;
+  targetDate: string;
+};
 
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -86,7 +103,11 @@ export default function DailyEntryPage() {
   const [actionInfo, setActionInfo] = useState('');
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [hiddenSuppliersOpen, setHiddenSuppliersOpen] = useState(false);
+  const [hiddenSupplierSearch, setHiddenSupplierSearch] = useState('');
   const [supplierActionTarget, setSupplierActionTarget] = useState<Supplier | null>(null);
+  const [fatImportOpen, setFatImportOpen] = useState(false);
+  const [fatImportOnlyMissing, setFatImportOnlyMissing] = useState(true);
+  const [fatImportRows, setFatImportRows] = useState<FatImportRow[]>([]);
 
   const [qualitySupplier, setQualitySupplier] = useState<Supplier | null>(null);
   const [qualityRows, setQualityRows] = useState<QualityDraftRow[]>([]);
@@ -122,6 +143,18 @@ export default function DailyEntryPage() {
     queryFn: () => fetchLockStatus(year, month),
   });
 
+  const previousMonthDate = useMemo(() => new Date(year, month - 2, 1), [year, month]);
+  const previousYear = previousMonthDate.getFullYear();
+  const previousMonth = previousMonthDate.getMonth() + 1;
+  const previousMonthLabel = previousMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const currentMonthLabel = new Date(year, month - 1, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+
+  const { data: previousMonthEntries = [], isLoading: previousMonthEntriesLoading } = useQuery({
+    queryKey: ['entries', previousYear, previousMonth, 'fat-import'],
+    queryFn: () => fetchEntries(previousYear, previousMonth),
+    enabled: fatImportOpen && period !== 'SECOND_HALF',
+  });
+
   const isLoading = suppliersLoading || entriesLoading;
   const yearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
   const isLocked = lockStatus?.isLocked ?? false;
@@ -138,6 +171,8 @@ export default function DailyEntryPage() {
       setQualitySupplier(null);
       setQualityRows([]);
       setChanges({});
+      setFatImportOpen(false);
+      setFatImportRows([]);
     }
   }, [isLocked]);
 
@@ -166,6 +201,15 @@ export default function DailyEntryPage() {
     () => allSuppliers.filter((supplier) => supplier.hidden_in_daily_entry),
     [allSuppliers]
   );
+
+  const filteredHiddenSuppliers = useMemo(() => {
+    const term = hiddenSupplierSearch.trim().toLocaleLowerCase();
+    if (!term) return hiddenSuppliers;
+
+    return hiddenSuppliers.filter((supplier) =>
+      `${supplier.first_name} ${supplier.last_name} ${supplier.city ?? ''}`.toLocaleLowerCase().includes(term)
+    );
+  }, [hiddenSupplierSearch, hiddenSuppliers]);
 
   useEffect(() => {
     if (!visibleSuppliers.length) return;
@@ -206,6 +250,91 @@ export default function DailyEntryPage() {
     }
     return map;
   }, [entries]);
+
+  const fatImportConfig = useMemo<FatImportConfig>(() => {
+    const currentFatEntries = entries.filter((item) => item.fat_pct !== null && item.fat_pct !== undefined);
+    let sourceEntries = previousMonthEntries.filter((item) => item.fat_pct !== null && item.fat_pct !== undefined);
+    let currentPeriodFatSuppliers = new Set(currentFatEntries.map((item) => item.supplier_id));
+    let sourceLabel = previousMonthLabel;
+    let targetLabel = t('daily.periodFull');
+    let targetDate = toDate(year, month, 1);
+
+    if (period === 'FIRST_HALF') {
+      currentPeriodFatSuppliers = new Set(
+        currentFatEntries
+          .filter((item) => Number(item.date.slice(8, 10)) <= 15)
+          .map((item) => item.supplier_id)
+      );
+      targetLabel = t('daily.periodFirst');
+      targetDate = toDate(year, month, 1);
+    } else if (period === 'SECOND_HALF') {
+      sourceEntries = currentFatEntries.filter((item) => Number(item.date.slice(8, 10)) <= 15);
+      currentPeriodFatSuppliers = new Set(
+        currentFatEntries
+          .filter((item) => Number(item.date.slice(8, 10)) >= 16)
+          .map((item) => item.supplier_id)
+      );
+      sourceLabel = `${t('daily.periodFirst')} ${currentMonthLabel}`;
+      targetLabel = t('daily.periodSecond');
+      targetDate = toDate(year, month, 16);
+    }
+
+    const latestSourceFatBySupplier = new Map<number, DailyEntry>();
+    for (const item of sourceEntries) {
+      const existing = latestSourceFatBySupplier.get(item.supplier_id);
+      if (!existing || existing.date < item.date) {
+        latestSourceFatBySupplier.set(item.supplier_id, item);
+      }
+    }
+
+    const rows: FatImportRow[] = [];
+    for (const supplier of visibleSuppliers) {
+      const sourceEntry = latestSourceFatBySupplier.get(supplier.id);
+      if (!sourceEntry) continue;
+
+      rows.push({
+        supplierId: supplier.id,
+        supplierName: `${supplier.first_name} ${supplier.last_name}`,
+        sourceDate: sourceEntry.date,
+        targetDate,
+        fat_pct: String(sourceEntry.fat_pct ?? ''),
+        include: true,
+        hasCurrentFat: currentPeriodFatSuppliers.has(supplier.id),
+      });
+    }
+
+    return { rows, sourceLabel, targetLabel, targetDate };
+  }, [currentMonthLabel, entries, month, period, previousMonthEntries, previousMonthLabel, t, visibleSuppliers, year]);
+
+  const fatImportLoading = fatImportOpen && period !== 'SECOND_HALF' && previousMonthEntriesLoading;
+
+  useEffect(() => {
+    if (!fatImportOpen) return;
+    setFatImportRows((prev) => {
+      const next = fatImportConfig.rows.map((row) => ({
+        ...row,
+        include: fatImportOnlyMissing ? !row.hasCurrentFat : true,
+      }));
+
+      if (
+        prev.length === next.length &&
+        prev.every(
+          (row, index) =>
+            row.supplierId === next[index].supplierId &&
+            row.supplierName === next[index].supplierName &&
+            row.sourceDate === next[index].sourceDate &&
+            row.targetDate === next[index].targetDate &&
+            row.fat_pct === next[index].fat_pct &&
+            row.include === next[index].include &&
+            row.hasCurrentFat === next[index].hasCurrentFat
+        )
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [fatImportConfig.rows, fatImportOnlyMissing, fatImportOpen]);
 
   const getCellValue = useCallback(
     (supplierId: number, day: number): number => {
@@ -611,6 +740,45 @@ export default function DailyEntryPage() {
     },
   });
 
+  const fatImportMutation = useMutation({
+    mutationFn: async () => {
+      if (editingDisabled) throw new Error(t('daily.editBlocked'));
+
+      const payload = fatImportRows
+        .filter((row) => row.include)
+        .map((row) => ({
+          supplierId: row.supplierId,
+          date: row.targetDate,
+          fat_pct: Number(row.fat_pct),
+        }))
+        .filter((row) => Number.isFinite(row.fat_pct) && row.fat_pct >= 0 && row.fat_pct <= 20);
+
+      if (!payload.length) throw new Error(t('daily.importFatNoSelection'));
+
+      const response = await fetch('/api/daily-entries/bulk-upsert', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw await responseError(response, 'Failed to import fat units');
+      return response.json();
+    },
+    onSuccess: async () => {
+      setActionError('');
+      setActionInfo(t('daily.importFatSuccess'));
+      setFatImportOpen(false);
+      setFatImportRows([]);
+      setFatImportOnlyMissing(true);
+      await queryClient.invalidateQueries({ queryKey: ['entries', year, month] });
+      await queryClient.invalidateQueries({ queryKey: ['daily-lock', year, month] });
+    },
+    onError: (error) => {
+      setActionInfo('');
+      setActionError(error instanceof Error ? error.message : t('daily.visibilityActionFailed'));
+    },
+  });
+
   function exportXlsx() {
     const rows: (string | number)[][] = [];
     rows.push([t('daily.supplier'), ...dayNumbers.map((d) => String(d)), t('daily.total'), t('daily.avgMm')]);
@@ -728,6 +896,18 @@ export default function DailyEntryPage() {
               </span>
             </button>
           ) : null}
+
+          <button
+            className="btn"
+            onClick={() => {
+              setFatImportOnlyMissing(true);
+              setFatImportOpen(true);
+            }}
+            disabled={editingDisabled || fatImportMutation.isPending}
+            title={`${t('daily.importFatTooltip')} ${fatImportConfig.sourceLabel}. ${t('daily.importFatTargetPart')} ${fatImportConfig.targetLabel}.`}
+          >
+            {t('daily.importFatFromPrevious')}
+          </button>
 
           {showSaveActions ? (
             <>
@@ -1159,15 +1339,157 @@ export default function DailyEntryPage() {
         </div>
       ) : null}
 
+      {fatImportOpen ? (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            if (fatImportMutation.isPending) return;
+            setFatImportOpen(false);
+            setFatImportRows([]);
+            setFatImportOnlyMissing(true);
+          }}
+        >
+          <div className="modal-panel" style={{ width: 'min(860px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'grid', gap: 4 }}>
+                <h3 style={{ margin: 0 }}>{t('daily.importFatTitle')}</h3>
+                <div className="muted">{`${t('daily.importFatSubtitle')} ${fatImportConfig.sourceLabel}.`}</div>
+              </div>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  setFatImportOpen(false);
+                  setFatImportRows([]);
+                  setFatImportOnlyMissing(true);
+                }}
+                disabled={fatImportMutation.isPending}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+
+            {fatImportLoading ? (
+              <div className="muted">{t('common.loading')}</div>
+            ) : fatImportConfig.rows.length === 0 ? (
+              <div className="muted">{t('daily.importFatNoSource')}</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {`${t('daily.importFatSubtitle')} ${fatImportConfig.sourceLabel}. ${t('daily.importFatTargetPart')} ${fatImportConfig.targetLabel}.`}
+                </div>
+
+                <label className="control-row" style={{ justifyContent: 'space-between' }}>
+                  <span className="muted">{t('daily.importFatOnlyMissing')}</span>
+                  <input
+                    type="checkbox"
+                    checked={fatImportOnlyMissing}
+                    onChange={(event) => setFatImportOnlyMissing(event.target.checked)}
+                  />
+                </label>
+
+                <div className="daily-hidden-list">
+                  {fatImportRows.map((row, index) => (
+                    <div key={row.supplierId} className="daily-hidden-row" style={{ alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: 0, flex: 1, display: 'grid', gap: 4 }}>
+                        <div className="daily-supplier-name">{row.supplierName}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {`${t('daily.importFatSourceDate')}: ${new Date(`${row.sourceDate}T00:00:00`).toLocaleDateString(locale)}`}
+                        </div>
+                        {row.hasCurrentFat ? (
+                          <div className="badge" style={{ width: 'fit-content' }}>
+                            {t('daily.importFatAlreadyExists')}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div style={{ display: 'grid', gap: 8, minWidth: 180 }}>
+                        <input
+                          className="input"
+                          type="number"
+                          step="0.1"
+                          value={row.fat_pct}
+                          onChange={(event) =>
+                            setFatImportRows((prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], fat_pct: event.target.value };
+                              return next;
+                            })
+                          }
+                          disabled={fatImportMutation.isPending || (fatImportOnlyMissing && row.hasCurrentFat)}
+                        />
+                        <label className="control-row" style={{ gap: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={row.include}
+                            disabled={fatImportMutation.isPending || (fatImportOnlyMissing && row.hasCurrentFat)}
+                            onChange={(event) =>
+                              setFatImportRows((prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], include: event.target.checked };
+                                return next;
+                              })
+                            }
+                          />
+                          <span className="muted">{t('daily.importFatInclude')}</span>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="control-row" style={{ justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => {
+                      setFatImportOpen(false);
+                      setFatImportRows([]);
+                      setFatImportOnlyMissing(true);
+                    }}
+                    disabled={fatImportMutation.isPending}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={() => fatImportMutation.mutate()}
+                    disabled={fatImportMutation.isPending}
+                  >
+                    {fatImportMutation.isPending ? t('common.saving') : t('daily.importFatApply')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {hiddenSuppliersOpen ? (
-        <div className="modal-backdrop" onClick={() => !visibilityMutation.isPending && setHiddenSuppliersOpen(false)}>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            if (visibilityMutation.isPending) return;
+            setHiddenSuppliersOpen(false);
+            setHiddenSupplierSearch('');
+          }}
+        >
           <div className="modal-panel" style={{ width: 'min(720px, 100%)' }} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'grid', gap: 4 }}>
                 <h3 style={{ margin: 0 }}>{t('daily.hiddenSuppliers')}</h3>
                 <div className="muted">{t('daily.hiddenSuppliersHint')}</div>
               </div>
-              <button className="btn" type="button" onClick={() => setHiddenSuppliersOpen(false)} disabled={visibilityMutation.isPending}>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  setHiddenSuppliersOpen(false);
+                  setHiddenSupplierSearch('');
+                }}
+                disabled={visibilityMutation.isPending}
+              >
                 {t('common.close')}
               </button>
             </div>
@@ -1175,8 +1497,19 @@ export default function DailyEntryPage() {
             {hiddenSuppliers.length === 0 ? (
               <div className="muted">{t('daily.noHiddenSuppliers')}</div>
             ) : (
-              <div className="daily-hidden-list">
-                {hiddenSuppliers.map((supplier) => (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <input
+                  className="input"
+                  value={hiddenSupplierSearch}
+                  onChange={(event) => setHiddenSupplierSearch(event.target.value)}
+                  placeholder={t('producerHistory.searchSupplier')}
+                />
+
+                <div className="daily-hidden-list">
+                  {filteredHiddenSuppliers.length === 0 ? (
+                    <div className="muted">{t('common.noData')}</div>
+                  ) : null}
+                  {filteredHiddenSuppliers.map((supplier) => (
                   <div key={supplier.id} className="daily-hidden-row">
                     <div style={{ minWidth: 0 }}>
                       <div className="daily-supplier-name">
@@ -1197,7 +1530,8 @@ export default function DailyEntryPage() {
                       </span>
                     </button>
                   </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
