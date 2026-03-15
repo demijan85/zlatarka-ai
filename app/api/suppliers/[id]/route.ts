@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supplierUpdateSchema } from '@/lib/schemas/suppliers';
-import { deleteSupplier, updateSupplier } from '@/lib/repositories/suppliers';
+import { deleteSupplier, DuplicateSupplierNameError, updateSupplier } from '@/lib/repositories/suppliers';
 
 function parseId(params: { id: string }): number {
   const id = Number(params.id);
@@ -17,6 +17,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const data = await updateSupplier(id, parsed);
     return NextResponse.json(data);
   } catch (error) {
+    if (error instanceof DuplicateSupplierNameError) {
+      return NextResponse.json(
+        { error: error.message, duplicateSupplier: error.duplicateSupplier },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 400 });
   }

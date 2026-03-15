@@ -7,6 +7,18 @@ import { ConfirmDialog } from '@/components/layout/confirm-dialog';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { Supplier } from '@/types/domain';
 
+type DuplicateSupplierInfo = Pick<Supplier, 'id' | 'first_name' | 'last_name' | 'hidden_in_daily_entry'>;
+
+class DuplicateSupplierClientError extends Error {
+  duplicateSupplier: DuplicateSupplierInfo;
+
+  constructor(duplicateSupplier: DuplicateSupplierInfo) {
+    super('Supplier with the same first and last name already exists');
+    this.name = 'DuplicateSupplierClientError';
+    this.duplicateSupplier = duplicateSupplier;
+  }
+}
+
 async function getSuppliers(): Promise<Supplier[]> {
   const response = await fetch('/api/suppliers', { cache: 'no-store' });
   if (!response.ok) throw new Error('Failed to fetch suppliers');
@@ -15,7 +27,8 @@ async function getSuppliers(): Promise<Supplier[]> {
 
 async function parseResponseError(response: Response, fallback: string): Promise<Error> {
   try {
-    const parsed = (await response.json()) as { error?: string };
+    const parsed = (await response.json()) as { error?: string; duplicateSupplier?: DuplicateSupplierInfo };
+    if (parsed.duplicateSupplier) return new DuplicateSupplierClientError(parsed.duplicateSupplier);
     if (parsed.error) return new Error(parsed.error);
   } catch {
     // ignore non-json response
@@ -45,8 +58,10 @@ export default function SuppliersPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const [actionError, setActionError] = useState('');
+  const [actionInfo, setActionInfo] = useState('');
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [duplicateHiddenSupplier, setDuplicateHiddenSupplier] = useState<DuplicateSupplierInfo | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [cityFilter, setCityFilter] = useState('');
 
@@ -112,11 +127,25 @@ export default function SuppliersPage() {
     },
     onSuccess: () => {
       setActionError('');
+      setActionInfo('');
       setShowForm(false);
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },
     onError: (error) => {
+      if (error instanceof DuplicateSupplierClientError) {
+        if (error.duplicateSupplier.hidden_in_daily_entry) {
+          setActionError('');
+          setDuplicateHiddenSupplier(error.duplicateSupplier);
+          return;
+        }
+
+        setActionInfo('');
+        setActionError(t('suppliers.duplicateExists'));
+        return;
+      }
+
+      setActionInfo('');
       setActionError(error instanceof Error ? error.message : 'Failed to save supplier');
     },
   });
@@ -129,6 +158,7 @@ export default function SuppliersPage() {
     },
     onSuccess: () => {
       setActionError('');
+      setActionInfo('');
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },
   });
@@ -145,9 +175,11 @@ export default function SuppliersPage() {
     },
     onSuccess: () => {
       setActionError('');
+      setActionInfo('');
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },
     onError: (error) => {
+      setActionInfo('');
       setActionError(error instanceof Error ? error.message : 'Failed to update supplier visibility');
     },
   });
@@ -180,10 +212,12 @@ export default function SuppliersPage() {
       if (context?.previous) {
         queryClient.setQueryData(['suppliers'], context.previous);
       }
+      setActionInfo('');
       setActionError(error instanceof Error ? error.message : 'Failed to reorder suppliers');
     },
     onSuccess: () => {
       setActionError('');
+      setActionInfo('');
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },
   });
@@ -191,6 +225,7 @@ export default function SuppliersPage() {
   function closeForm() {
     setShowForm(false);
     setEditing(null);
+    setDuplicateHiddenSupplier(null);
   }
 
   function openCreateForm() {
@@ -228,6 +263,26 @@ export default function SuppliersPage() {
     return missing;
   }
 
+  function normalizeNamePart(value: string | null | undefined): string {
+    return (value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  function findDuplicateSupplier(values: Partial<SupplierFormValues>): DuplicateSupplierInfo | null {
+    const normalizedFirstName = normalizeNamePart(values.first_name);
+    const normalizedLastName = normalizeNamePart(values.last_name);
+    if (!normalizedFirstName || !normalizedLastName) return null;
+
+    return (
+      data.find((supplier) => {
+        if (editing?.id && supplier.id === editing.id) return false;
+        return (
+          normalizeNamePart(supplier.first_name) === normalizedFirstName &&
+          normalizeNamePart(supplier.last_name) === normalizedLastName
+        );
+      }) ?? null
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="card" style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -260,6 +315,12 @@ export default function SuppliersPage() {
       {actionError ? (
         <div className="card" style={{ padding: 12, color: 'var(--danger)' }}>
           {actionError}
+        </div>
+      ) : null}
+
+      {actionInfo ? (
+        <div className="card" style={{ padding: 12, color: 'var(--accent-700)' }}>
+          {actionInfo}
         </div>
       ) : null}
 
@@ -399,6 +460,20 @@ export default function SuppliersPage() {
               initial={formInitialValues}
               onCancel={closeForm}
               onSubmit={async (values) => {
+                const duplicate = findDuplicateSupplier(values);
+                if (duplicate) {
+                  if (duplicate.hidden_in_daily_entry) {
+                    setActionError('');
+                    setActionInfo('');
+                    setDuplicateHiddenSupplier(duplicate);
+                    return;
+                  }
+
+                  setActionInfo('');
+                  setActionError(t('suppliers.duplicateExists'));
+                  return;
+                }
+
                 await saveMutation.mutateAsync(values).catch(() => undefined);
               }}
             />
@@ -429,6 +504,39 @@ export default function SuppliersPage() {
               setSupplierToDelete(null);
             },
           });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(duplicateHiddenSupplier)}
+        title={t('suppliers.duplicateTitle')}
+        message={
+          duplicateHiddenSupplier
+            ? `${duplicateHiddenSupplier.first_name} ${duplicateHiddenSupplier.last_name}. ${t('suppliers.duplicateHiddenExists')}`
+            : t('suppliers.duplicateHiddenExists')
+        }
+        confirmLabel={t('suppliers.activateExisting')}
+        busy={visibilityMutation.isPending}
+        onCancel={() => setDuplicateHiddenSupplier(null)}
+        onConfirm={() => {
+          if (!duplicateHiddenSupplier) return;
+
+          visibilityMutation.mutate(
+            { id: duplicateHiddenSupplier.id, hidden: false },
+            {
+              onSuccess: () => {
+                setActionError('');
+                setActionInfo(t('suppliers.reactivated'));
+                setDuplicateHiddenSupplier(null);
+                setShowForm(false);
+                setEditing(null);
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+              },
+              onError: () => {
+                setDuplicateHiddenSupplier(null);
+              },
+            }
+          );
         }}
       />
     </div>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { buildPaymentsXml, encodePaymentsXml } from '@/lib/exports/payments-xml';
 import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
+import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
 import { yearMonthFrom } from '@/lib/utils/year-month';
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
     const month = parseMonth(searchParams.get('month'), now.getMonth() + 1);
     const period = normalizePeriod(searchParams.get('period'));
     const city = searchParams.get('city') || undefined;
+    const language = normalizeExportLanguage(searchParams.get('lang'));
     const supplierIds = parseSupplierIds(searchParams);
 
     const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
@@ -41,7 +43,7 @@ export async function GET(request: Request) {
     return new NextResponse(new Blob([payload], { type: 'application/xml; charset=utf-16le' }), {
       headers: {
         'Content-Type': 'application/xml; charset=utf-16le',
-        'Content-Disposition': 'attachment; filename="payments.xml"',
+        'Content-Disposition': `attachment; filename="${getMonthlyExportFileName('payments', year, month, language, period)}"`,
       },
     });
   } catch (error) {

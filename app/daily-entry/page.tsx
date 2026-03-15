@@ -45,6 +45,10 @@ type FatImportConfig = {
   targetDate: string;
 };
 
+function hasMeaningfulEntry(entry: DailyEntry): boolean {
+  return Number(entry.qty ?? 0) !== 0 || Number(entry.fat_pct ?? 0) !== 0;
+}
+
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
@@ -191,7 +195,7 @@ export default function DailyEntryPage() {
   }, [dayNumbers, selectedDay]);
 
   const visibleSuppliers = useMemo(() => {
-    const supplierIdsWithEntries = new Set(entries.map((item) => item.supplier_id));
+    const supplierIdsWithEntries = new Set(entries.filter(hasMeaningfulEntry).map((item) => item.supplier_id));
     return allSuppliers.filter(
       (supplier) => !supplier.hidden_in_daily_entry || supplierIdsWithEntries.has(supplier.id)
     );
@@ -441,8 +445,29 @@ export default function DailyEntryPage() {
     });
   }
 
+  function meaningfulEntriesForSupplier(supplierId: number) {
+    return entries.filter((entry) => entry.supplier_id === supplierId && hasMeaningfulEntry(entry));
+  }
+
   const visibilityMutation = useMutation({
-    mutationFn: async ({ supplier, hidden }: { supplier: Supplier; hidden: boolean }) => {
+    mutationFn: async ({
+      supplier,
+      hidden,
+      deleteEntryIds = [],
+    }: {
+      supplier: Supplier;
+      hidden: boolean;
+      deleteEntryIds?: number[];
+    }) => {
+      if (hidden && deleteEntryIds.length) {
+        for (const entryId of deleteEntryIds) {
+          const deleteResponse = await fetch(`/api/daily-entries/${entryId}`, { method: 'DELETE' });
+          if (!deleteResponse.ok) {
+            throw await responseError(deleteResponse, 'Failed to clear supplier entries before hiding');
+          }
+        }
+      }
+
       const response = await fetch(`/api/suppliers/${supplier.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1577,6 +1602,25 @@ export default function DailyEntryPage() {
                   setSupplierActionTarget(null);
                   if (target.hidden_in_daily_entry) {
                     visibilityMutation.mutate({ supplier: target, hidden: false });
+                    return;
+                  }
+
+                  const supplierEntries = meaningfulEntriesForSupplier(target.id);
+                  if (supplierEntries.length) {
+                    setConfirmState({
+                      title: t('daily.hideSupplierDeleteTitle'),
+                      message: `${target.first_name} ${target.last_name}. ${t('daily.hideSupplierDeleteMessage')}`,
+                      confirmLabel: t('daily.hideSupplierDeleteConfirm'),
+                      tone: 'danger',
+                      onConfirm: () => {
+                        setConfirmState(null);
+                        visibilityMutation.mutate({
+                          supplier: target,
+                          hidden: true,
+                          deleteEntryIds: supplierEntries.map((entry) => entry.id),
+                        });
+                      },
+                    });
                     return;
                   }
 
