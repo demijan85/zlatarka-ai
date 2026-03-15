@@ -9,7 +9,7 @@ import { Topbar } from './topbar';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const theme = useThemeStore((state) => state.theme);
 

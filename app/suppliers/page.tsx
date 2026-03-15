@@ -272,6 +272,7 @@ export default function SuppliersPage() {
               <th>{t('suppliers.lastName')}</th>
               <th>{t('suppliers.city')}</th>
               <th>{t('suppliers.phone')}</th>
+              <th>{t('suppliers.cows')}</th>
               <th>{t('suppliers.dailyEntry')}</th>
               <th>{t('suppliers.actions')}</th>
             </tr>
@@ -279,17 +280,17 @@ export default function SuppliersPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7}>{t('suppliers.loading')}</td>
+                <td colSpan={8}>{t('suppliers.loading')}</td>
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan={7} style={{ color: 'var(--danger)' }}>
+                <td colSpan={8} style={{ color: 'var(--danger)' }}>
                   {(error as Error).message}
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7}>{t('suppliers.noData')}</td>
+                <td colSpan={8}>{t('suppliers.noData')}</td>
               </tr>
             ) : (
               filtered.map((item) => {
@@ -311,6 +312,7 @@ export default function SuppliersPage() {
                   <td>{item.last_name}</td>
                   <td>{item.city ?? ''}</td>
                   <td>{item.phone ?? ''}</td>
+                  <td>{item.number_of_cows ?? ''}</td>
                   <td>
                     <span className="badge">
                       {item.hidden_in_daily_entry ? t('suppliers.hiddenInDailyEntry') : t('suppliers.visibleInDailyEntry')}
