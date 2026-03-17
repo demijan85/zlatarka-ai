@@ -217,6 +217,10 @@ Specijalna logika:
 
 - `hidden_in_daily_entry` odredjuje da li se proizvodjac vidi u novim dnevnim unosima
 - pri kreiranju novog dobavljaca `order_index` se postavlja na kraj liste
+- `bank_account` se normalizuje na srpski obrazac `3-13-2`
+- srednji deo racuna se dopunjava vodecim nulama do 13 cifara
+- backend provera duplikata po `first_name + last_name` je autoritativna
+- create tok moze da preusmeri na overwrite postojeceg zapisa umesto pravljenja duplikata
 - postoji fallback za problem sa zaostalom `suppliers.id` sekvencom
 
 ### 6.3 Pregledi i obracun
@@ -355,6 +359,7 @@ Sta se validira:
 - forme za dobavljace
 - bulk upsert dnevnih unosa
 - zahtevi za korekcije
+- format tekuceg racuna za Srbiju kroz helper normalizaciju i Zod proveru
 
 ## 10. Baza i SQL migracije
 

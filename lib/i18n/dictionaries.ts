@@ -103,10 +103,12 @@ const srCyrl: Dictionary = {
   'suppliers.missingFieldsTooltip': 'Недостају подаци',
   'suppliers.duplicateTitle': 'Постојећи произвођач',
   'suppliers.duplicateExists': 'Произвођач са истим именом и презименом већ постоји.',
-  'suppliers.duplicateHiddenExists':
-    'Произвођач са истим именом и презименом већ постоји, али је сакривен. Да ли желите да га поново активирате?',
-  'suppliers.activateExisting': 'Активирај постојећег',
-  'suppliers.reactivated': 'Постојећи произвођач је поново активиран.',
+  'suppliers.duplicateOverwriteExists':
+    'Произвођач са истим именом и презименом већ постоји. Ако желите, преписаћемо постојећи запис овим подацима.',
+  'suppliers.duplicateHiddenOverwriteExists':
+    'Произвођач са истим именом и презименом већ постоји, али је сакривен. Ако желите, преписаћемо постојећи запис овим подацима и поново га активирати.',
+  'suppliers.overwriteExisting': 'Препиши постојећег',
+  'suppliers.overwrittenExisting': 'Постојећи произвођач је ажуриран овим подацима.',
 
   'supplierForm.order': 'Редослед',
   'supplierForm.firstName': 'Име',
@@ -115,6 +117,7 @@ const srCyrl: Dictionary = {
   'supplierForm.email': 'Е-пошта',
   'supplierForm.jmbg': 'ЈМБГ',
   'supplierForm.bankAccount': 'Текући рачун',
+  'supplierForm.bankAccountHint': 'Формат: xxx-xxxxxxxxxxxxx-xx. Средњи део се допуњава нулама ако је краћи.',
   'supplierForm.agricultureNumber': 'Број пољопривредног газдинства',
   'supplierForm.cows': 'Број крава',
   'supplierForm.street': 'Улица',
@@ -608,10 +611,12 @@ const en: Dictionary = {
   'suppliers.missingFieldsTooltip': 'Missing data',
   'suppliers.duplicateTitle': 'Existing supplier',
   'suppliers.duplicateExists': 'A supplier with the same first and last name already exists.',
-  'suppliers.duplicateHiddenExists':
-    'A supplier with the same first and last name already exists, but is hidden. Do you want to activate it again?',
-  'suppliers.activateExisting': 'Activate existing',
-  'suppliers.reactivated': 'The existing supplier has been activated again.',
+  'suppliers.duplicateOverwriteExists':
+    'A supplier with the same first and last name already exists. If you want, we will overwrite the existing record with these values.',
+  'suppliers.duplicateHiddenOverwriteExists':
+    'A supplier with the same first and last name already exists, but is hidden. If you want, we will overwrite the existing record with these values and activate it again.',
+  'suppliers.overwriteExisting': 'Overwrite existing',
+  'suppliers.overwrittenExisting': 'The existing supplier was updated with these values.',
 
   'supplierForm.order': 'Order',
   'supplierForm.firstName': 'First name',
@@ -620,6 +625,7 @@ const en: Dictionary = {
   'supplierForm.email': 'Email',
   'supplierForm.jmbg': 'JMBG',
   'supplierForm.bankAccount': 'Bank account',
+  'supplierForm.bankAccountHint': 'Format: xxx-xxxxxxxxxxxxx-xx. The middle section is left-padded with zeros if it is shorter.',
   'supplierForm.agricultureNumber': 'Agriculture number',
   'supplierForm.cows': 'Cows',
   'supplierForm.street': 'Street',

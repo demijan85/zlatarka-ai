@@ -5,9 +5,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SupplierForm, type SupplierFormValues } from '@/components/forms/supplier-form';
 import { ConfirmDialog } from '@/components/layout/confirm-dialog';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { normalizeSerbianBankAccount } from '@/lib/utils/bank-account';
 import type { Supplier } from '@/types/domain';
 
 type DuplicateSupplierInfo = Pick<Supplier, 'id' | 'first_name' | 'last_name' | 'hidden_in_daily_entry'>;
+type SaveSupplierPayload = {
+  values: Partial<Supplier>;
+  targetSupplierId?: number;
+  reactivateExisting?: boolean;
+};
+type DuplicateOverwriteState = {
+  duplicateSupplier: DuplicateSupplierInfo;
+  values: SupplierFormValues;
+};
 
 class DuplicateSupplierClientError extends Error {
   duplicateSupplier: DuplicateSupplierInfo;
@@ -46,7 +56,7 @@ function normalizeSupplierPayload(payload: Partial<Supplier>): Partial<Supplier>
     email: payload.email?.trim() || null,
     jmbg: payload.jmbg?.trim() || null,
     agriculture_number: payload.agriculture_number?.trim() || null,
-    bank_account: payload.bank_account?.trim() || null,
+    bank_account: normalizeSerbianBankAccount(payload.bank_account) || null,
     street: payload.street?.trim() || null,
     city: payload.city?.trim() ?? '',
     country: 'Srbija',
@@ -61,7 +71,7 @@ export default function SuppliersPage() {
   const [actionInfo, setActionInfo] = useState('');
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
-  const [duplicateHiddenSupplier, setDuplicateHiddenSupplier] = useState<DuplicateSupplierInfo | null>(null);
+  const [duplicateOverwrite, setDuplicateOverwrite] = useState<DuplicateOverwriteState | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [cityFilter, setCityFilter] = useState('');
 
@@ -111,32 +121,43 @@ export default function SuppliersPage() {
   }, [showForm]);
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: Partial<Supplier>) => {
-      const isEdit = Boolean(editing?.id);
-      const url = isEdit ? `/api/suppliers/${editing?.id}` : '/api/suppliers';
+    mutationFn: async ({ values, targetSupplierId, reactivateExisting }: SaveSupplierPayload) => {
+      const resolvedId = targetSupplierId ?? editing?.id;
+      const isEdit = Boolean(resolvedId);
+      const url = isEdit ? `/api/suppliers/${resolvedId}` : '/api/suppliers';
       const method = isEdit ? 'PUT' : 'POST';
+      const normalizedPayload = normalizeSupplierPayload(values);
+
+      if (reactivateExisting) {
+        normalizedPayload.hidden_in_daily_entry = false;
+      }
 
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(normalizeSupplierPayload(payload)),
+        body: JSON.stringify(normalizedPayload),
       });
 
       if (!response.ok) throw await parseResponseError(response, 'Failed to save supplier');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       setActionError('');
-      setActionInfo('');
+      setActionInfo(variables.targetSupplierId && !editing ? t('suppliers.overwrittenExisting') : '');
+      setDuplicateOverwrite(null);
       setShowForm(false);
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       if (error instanceof DuplicateSupplierClientError) {
-        if (error.duplicateSupplier.hidden_in_daily_entry) {
+        if (!editing && !variables.targetSupplierId) {
           setActionError('');
-          setDuplicateHiddenSupplier(error.duplicateSupplier);
+          setActionInfo('');
+          setDuplicateOverwrite({
+            duplicateSupplier: error.duplicateSupplier,
+            values: variables.values as SupplierFormValues,
+          });
           return;
         }
 
@@ -225,7 +246,7 @@ export default function SuppliersPage() {
   function closeForm() {
     setShowForm(false);
     setEditing(null);
-    setDuplicateHiddenSupplier(null);
+    setDuplicateOverwrite(null);
   }
 
   function openCreateForm() {
@@ -261,26 +282,6 @@ export default function SuppliersPage() {
     if (!item.jmbg) missing.push(t('suppliers.jmbg'));
     if (!item.bank_account) missing.push(t('suppliers.bankAccount'));
     return missing;
-  }
-
-  function normalizeNamePart(value: string | null | undefined): string {
-    return (value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
-  }
-
-  function findDuplicateSupplier(values: Partial<SupplierFormValues>): DuplicateSupplierInfo | null {
-    const normalizedFirstName = normalizeNamePart(values.first_name);
-    const normalizedLastName = normalizeNamePart(values.last_name);
-    if (!normalizedFirstName || !normalizedLastName) return null;
-
-    return (
-      data.find((supplier) => {
-        if (editing?.id && supplier.id === editing.id) return false;
-        return (
-          normalizeNamePart(supplier.first_name) === normalizedFirstName &&
-          normalizeNamePart(supplier.last_name) === normalizedLastName
-        );
-      }) ?? null
-    );
   }
 
   return (
@@ -460,21 +461,7 @@ export default function SuppliersPage() {
               initial={formInitialValues}
               onCancel={closeForm}
               onSubmit={async (values) => {
-                const duplicate = findDuplicateSupplier(values);
-                if (duplicate) {
-                  if (duplicate.hidden_in_daily_entry) {
-                    setActionError('');
-                    setActionInfo('');
-                    setDuplicateHiddenSupplier(duplicate);
-                    return;
-                  }
-
-                  setActionInfo('');
-                  setActionError(t('suppliers.duplicateExists'));
-                  return;
-                }
-
-                await saveMutation.mutateAsync(values).catch(() => undefined);
+                await saveMutation.mutateAsync({ values }).catch(() => undefined);
               }}
             />
           </div>
@@ -508,35 +495,28 @@ export default function SuppliersPage() {
       />
 
       <ConfirmDialog
-        open={Boolean(duplicateHiddenSupplier)}
+        open={Boolean(duplicateOverwrite)}
         title={t('suppliers.duplicateTitle')}
         message={
-          duplicateHiddenSupplier
-            ? `${duplicateHiddenSupplier.first_name} ${duplicateHiddenSupplier.last_name}. ${t('suppliers.duplicateHiddenExists')}`
-            : t('suppliers.duplicateHiddenExists')
+          duplicateOverwrite
+            ? `${duplicateOverwrite.duplicateSupplier.first_name} ${duplicateOverwrite.duplicateSupplier.last_name}. ${
+                duplicateOverwrite.duplicateSupplier.hidden_in_daily_entry
+                  ? t('suppliers.duplicateHiddenOverwriteExists')
+                  : t('suppliers.duplicateOverwriteExists')
+              }`
+            : t('suppliers.duplicateOverwriteExists')
         }
-        confirmLabel={t('suppliers.activateExisting')}
-        busy={visibilityMutation.isPending}
-        onCancel={() => setDuplicateHiddenSupplier(null)}
+        confirmLabel={t('suppliers.overwriteExisting')}
+        busy={saveMutation.isPending}
+        onCancel={() => setDuplicateOverwrite(null)}
         onConfirm={() => {
-          if (!duplicateHiddenSupplier) return;
+          if (!duplicateOverwrite) return;
 
-          visibilityMutation.mutate(
-            { id: duplicateHiddenSupplier.id, hidden: false },
-            {
-              onSuccess: () => {
-                setActionError('');
-                setActionInfo(t('suppliers.reactivated'));
-                setDuplicateHiddenSupplier(null);
-                setShowForm(false);
-                setEditing(null);
-                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-              },
-              onError: () => {
-                setDuplicateHiddenSupplier(null);
-              },
-            }
-          );
+          saveMutation.mutate({
+            values: duplicateOverwrite.values,
+            targetSupplierId: duplicateOverwrite.duplicateSupplier.id,
+            reactivateExisting: duplicateOverwrite.duplicateSupplier.hidden_in_daily_entry,
+          });
         }}
       />
     </div>

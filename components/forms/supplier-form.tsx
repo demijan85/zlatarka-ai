@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { supplierSchema } from '@/lib/schemas/suppliers';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { formatSerbianBankAccountForDisplay, normalizeSerbianBankAccount } from '@/lib/utils/bank-account';
 import { z } from 'zod';
 
 const formSchema = supplierSchema;
@@ -39,7 +40,7 @@ function normalizedInitialValues(initial?: Partial<FormValues>): Partial<FormVal
     email: initial.email ?? '',
     jmbg: initial.jmbg ?? '',
     agriculture_number: initial.agriculture_number ?? '',
-    bank_account: initial.bank_account ?? '',
+    bank_account: normalizeSerbianBankAccount(initial.bank_account),
     street: initial.street ?? '',
     city: initial.city ?? '',
     country: initial.country ?? 'Srbija',
@@ -69,6 +70,7 @@ export function SupplierForm({
   }
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -121,7 +123,27 @@ export function SupplierForm({
       <div className="supplier-form-grid supplier-form-grid-3">
         <label className="module-field">
           <span className="field-label">{t('supplierForm.bankAccount')}</span>
-          <input className="input" placeholder={t('supplierForm.bankAccount')} {...register('bank_account')} />
+          <Controller
+            control={control}
+            name="bank_account"
+            render={({ field }) => (
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="160-0000002047522-08"
+                value={field.value ?? ''}
+                onChange={(event) => field.onChange(formatSerbianBankAccountForDisplay(event.target.value))}
+                onBlur={(event) => {
+                  const normalized = normalizeSerbianBankAccount(event.target.value);
+                  field.onChange(normalized);
+                  field.onBlur();
+                }}
+              />
+            )}
+          />
+          <span className="muted" style={{ fontSize: 12 }}>
+            {t('supplierForm.bankAccountHint')}
+          </span>
         </label>
         <label className="module-field">
           <span className="field-label">{t('supplierForm.agricultureNumber')}</span>

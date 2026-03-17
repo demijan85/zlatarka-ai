@@ -181,12 +181,14 @@ Glavne funkcionalnosti:
 - dodavanje novog dobavljaca
 - izmena postojeceg dobavljaca
 - validacija da ne mogu da postoje dva proizvodjaca sa istim imenom i prezimenom
-- ako takav proizvodjac vec postoji ali je sakriven, korisniku se nudi da ga ponovo aktivira umesto pravljenja duplikata
+- ako pri unosu novog proizvodjaca vec postoji zapis sa istim imenom i prezimenom, korisniku se nudi da prepise postojeci zapis tim podacima umesto pravljenja duplikata
+- ako je postojeci proizvodjac sakriven, prepisivanje ga usput ponovo aktivira
 - brisanje dobavljaca
 - pomeranje redosleda gore/dole
 - automatsko postavljanje `order_index` na poslednje mesto pri kreiranju
 - pregled statusa da li je aktivan za dnevni unos
 - pregled broja krava
+- validacija i formatiranje tekuceg racuna po srpskom obrascu `xxx-xxxxxxxxxxxxx-xx`, uz dopunu nula u srednjem delu kada je kraci
 - vizuelno obelezavanje redova ako fale kljucni podaci:
   - broj gazdinstva
   - maticni broj
