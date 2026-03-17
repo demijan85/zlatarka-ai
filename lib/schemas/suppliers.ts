@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidSerbianBankAccount, normalizeSerbianBankAccount } from '@/lib/utils/bank-account';
 
 export const supplierSchema = z.object({
   order_index: z.coerce.number().int().nonnegative(),
@@ -8,7 +9,12 @@ export const supplierSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   jmbg: z.string().optional().nullable(),
   agriculture_number: z.string().optional().nullable(),
-  bank_account: z.string().optional().nullable(),
+  bank_account: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => normalizeSerbianBankAccount(value))
+    .refine((value) => isValidSerbianBankAccount(value), 'Invalid Serbian bank account format'),
   street: z.string().optional().nullable(),
   city: z.string().min(1),
   country: z.string().optional().nullable(),
