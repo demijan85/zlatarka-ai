@@ -12,7 +12,7 @@ import {
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { getMonthlyExportFileName } from '@/lib/utils/export-file-names';
-import { yearMonthFrom } from '@/lib/utils/year-month';
+import { periodStartDate } from '@/lib/utils/period';
 
 type Period = 'first' | 'second' | 'all';
 const EMPTY_ROWS: MonthlySummaryRow[] = [];
@@ -103,7 +103,9 @@ export default function MonthlyViewPage() {
   const allExportableSelected =
     exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
 
-  const currentYearMonth = useMemo(() => yearMonthFrom(year, month), [year, month]);
+  const currentYearMonth = useMemo(() => `${year}-${String(month).padStart(2, '0')}`, [year, month]);
+  const firstHalfDate = useMemo(() => periodStartDate(year, month, 'first'), [year, month]);
+  const secondHalfDate = useMemo(() => periodStartDate(year, month, 'second'), [year, month]);
   const overrideTarget = useMemo(
     () => visibleRows.find((row) => row.supplierId === overrideSupplierId) ?? null,
     [overrideSupplierId, visibleRows]
@@ -112,10 +114,15 @@ export default function MonthlyViewPage() {
     () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
     [versionsData]
   );
-  const effectiveVersion = useMemo(
-    () => getEffectiveConstantsForPeriod(orderedVersions, currentYearMonth),
-    [orderedVersions, currentYearMonth]
-  );
+  const constantsLabel = useMemo(() => {
+    const firstHalfVersion = getEffectiveConstantsForPeriod(orderedVersions, firstHalfDate);
+    const secondHalfVersion = getEffectiveConstantsForPeriod(orderedVersions, secondHalfDate);
+
+    if (period === 'first') return firstHalfVersion.validFrom;
+    if (period === 'second') return secondHalfVersion.validFrom;
+    if (firstHalfVersion.validFrom === secondHalfVersion.validFrom) return firstHalfVersion.validFrom;
+    return `${firstHalfVersion.validFrom} / ${secondHalfVersion.validFrom}`;
+  }, [firstHalfDate, orderedVersions, period, secondHalfDate]);
 
   const overrideMutation = useMutation({
     mutationFn: async (payload: { supplierId: number; priceWithTaxOverride: number | null; stimulationOverride: number | null }) => {
@@ -243,7 +250,7 @@ export default function MonthlyViewPage() {
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0 }}>{t('monthly.title')}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
-          {t('monthly.constantsUsed')}: <strong>{effectiveVersion.validFrom}</strong>
+          {t('monthly.constantsUsed')}: <strong>{constantsLabel}</strong>
         </div>
 
         <div className="control-row">

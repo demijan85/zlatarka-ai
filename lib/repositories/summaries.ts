@@ -1,5 +1,10 @@
-import { defaultCalculationConstants, type CalculationConstants } from '@/lib/constants/calculation';
+import {
+  getEffectiveConstantsForPeriod,
+  toCalculationConstants,
+  type VersionedCalculationConstants,
+} from '@/lib/constants/calculation';
 import { applyMonthlySummaryOverrides, average, monthlyTotalAmount, quarterlyTotalPremium } from '@/lib/calculations/formulas';
+import { listCalculationConstantVersions } from '@/lib/repositories/calculation-constants';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { listMonthlySummaryOverrides } from '@/lib/repositories/monthly-summary-overrides';
 import { getMonthBounds, getQuarterBounds } from '@/lib/utils/date';
@@ -7,30 +12,107 @@ import { filterDatesByPeriod, type Period } from '@/lib/utils/period';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 import type { DailyEntry, MonthlySummaryRow, QuarterlySummaryRow, Supplier } from '@/types/domain';
 
+function summarizeEntriesWithVersions(
+  entries: DailyEntry[],
+  versions: VersionedCalculationConstants[]
+): {
+  qty: number;
+  fatPct: number;
+  pricePerFatPct: number;
+  pricePerQty: number;
+  taxPercentage: number;
+  priceWithTax: number;
+  stimulation: number;
+  totalAmount: number;
+} {
+  const qty = entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const fatValues = entries.map((item) => item.fat_pct).filter((x): x is number => x !== null && x !== undefined);
+  const fatPct = average(fatValues);
+
+  if (qty <= 0) {
+    return {
+      qty,
+      fatPct,
+      pricePerFatPct: 0,
+      pricePerQty: 0,
+      taxPercentage: 0,
+      priceWithTax: 0,
+      stimulation: 0,
+      totalAmount: 0,
+    };
+  }
+
+  const grouped = new Map<string, { version: VersionedCalculationConstants; entries: DailyEntry[] }>();
+
+  for (const entry of entries) {
+    const version = getEffectiveConstantsForPeriod(versions, entry.date);
+    const existing = grouped.get(version.validFrom);
+    if (existing) {
+      existing.entries.push(entry);
+      continue;
+    }
+    grouped.set(version.validFrom, { version, entries: [entry] });
+  }
+
+  let milkNetAmount = 0;
+  let milkGrossAmount = 0;
+  let stimulationAmount = 0;
+  let totalAmount = 0;
+
+  for (const group of grouped.values()) {
+    const groupQty = group.entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+    const groupFatValues = group.entries
+      .map((item) => item.fat_pct)
+      .filter((value): value is number => value !== null && value !== undefined);
+    const groupFatPct = average(groupFatValues);
+    const constants = toCalculationConstants(group.version);
+    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants);
+
+    milkNetAmount += groupQty * totals.pricePerQty;
+    milkGrossAmount += groupQty * totals.priceWithTax;
+    stimulationAmount += groupQty * totals.stimulation;
+    totalAmount += totals.totalAmount;
+  }
+
+  const pricePerQty = milkNetAmount / qty;
+  const priceWithTax = milkGrossAmount / qty;
+  const stimulation = stimulationAmount / qty;
+  const pricePerFatPct = fatPct > 0 ? pricePerQty / fatPct : 0;
+  const taxPercentage = pricePerQty > 0 ? ((priceWithTax / pricePerQty) - 1) * 100 : 0;
+
+  return {
+    qty,
+    fatPct,
+    pricePerFatPct,
+    pricePerQty,
+    taxPercentage,
+    priceWithTax,
+    stimulation,
+    totalAmount,
+  };
+}
+
 function calculateMonthlyRow(
   serialNum: number,
   supplier: Supplier,
   entries: DailyEntry[],
-  constants: CalculationConstants,
+  versions: VersionedCalculationConstants[],
   overrides?: {
     priceWithTaxOverride: number | null;
     stimulationOverride: number | null;
   }
 ): MonthlySummaryRow {
-  const qty = entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-  const fatValues = entries.map((item) => item.fat_pct).filter((x): x is number => x !== null && x !== undefined);
-  const fatPct = average(fatValues);
-  const calculated = monthlyTotalAmount(qty, fatPct, constants);
+  const calculated = summarizeEntriesWithVersions(entries, versions);
   const { pricePerFatPct, pricePerQty, priceWithTax, stimulation, totalAmount } = applyMonthlySummaryOverrides(
-    qty,
-    fatPct,
+    calculated.qty,
+    calculated.fatPct,
     {
-      pricePerFatPct: constants.pricePerFatPct,
+      pricePerFatPct: calculated.pricePerFatPct,
       pricePerQty: calculated.pricePerQty,
       priceWithTax: calculated.priceWithTax,
       stimulation: calculated.stimulation,
     },
-    constants.taxPercentage,
+    calculated.taxPercentage,
     {
       priceWithTaxOverride: overrides?.priceWithTaxOverride ?? null,
       stimulationOverride: overrides?.stimulationOverride ?? null,
@@ -47,13 +129,13 @@ function calculateMonthlyRow(
     zipCode: supplier.zip_code,
     jmbg: supplier.jmbg,
     bankAccount: supplier.bank_account,
-    qty,
-    fatPct,
-    calculatedPricePerFatPct: constants.pricePerFatPct,
+    qty: calculated.qty,
+    fatPct: calculated.fatPct,
+    calculatedPricePerFatPct: calculated.pricePerFatPct,
     pricePerFatPct,
     calculatedPricePerQty: calculated.pricePerQty,
     pricePerQty,
-    taxPercentage: constants.taxPercentage,
+    taxPercentage: calculated.taxPercentage,
     calculatedPriceWithTax: calculated.priceWithTax,
     priceWithTax,
     calculatedStimulation: calculated.stimulation,
@@ -98,11 +180,13 @@ export async function getMonthlySummaries(options: {
   month: number;
   city?: string;
   period?: Period;
-  constants?: CalculationConstants;
+  versions?: VersionedCalculationConstants[];
 }): Promise<MonthlySummaryRow[]> {
-  const constants = options.constants ?? defaultCalculationConstants;
   const period = options.period ?? 'all';
-  const suppliers = await fetchSuppliers(options.city);
+  const [suppliers, versions] = await Promise.all([
+    fetchSuppliers(options.city),
+    options.versions ? Promise.resolve(options.versions) : listCalculationConstantVersions(),
+  ]);
   if (!suppliers.length) return [];
   const yearMonth = yearMonthFrom(options.year, options.month);
   const overrides = await listMonthlySummaryOverrides(yearMonth, period);
@@ -136,7 +220,7 @@ export async function getMonthlySummaries(options: {
     .map((supplier) => {
       const supplierEntries = bySupplier[supplier.id] ?? [];
       if (!supplierEntries.length) return null;
-      return calculateMonthlyRow(serial++, supplier, supplierEntries, constants, overrideMap.get(supplier.id));
+      return calculateMonthlyRow(serial++, supplier, supplierEntries, versions, overrideMap.get(supplier.id));
     })
     .filter((item): item is MonthlySummaryRow => item !== null && Number.isFinite(item.qty) && item.qty > 0);
 }
@@ -144,10 +228,12 @@ export async function getMonthlySummaries(options: {
 export async function getQuarterlySummaries(options: {
   year: number;
   quarter: number;
-  constants?: CalculationConstants;
+  versions?: VersionedCalculationConstants[];
 }): Promise<QuarterlySummaryRow[]> {
-  const constants = options.constants ?? defaultCalculationConstants;
-  const suppliers = await fetchSuppliers();
+  const [suppliers, versions] = await Promise.all([
+    fetchSuppliers(),
+    options.versions ? Promise.resolve(options.versions) : listCalculationConstantVersions(),
+  ]);
   if (!suppliers.length) return [];
 
   const { startDate, endDate } = getQuarterBounds(options.year, options.quarter);
@@ -172,6 +258,13 @@ export async function getQuarterlySummaries(options: {
       const qty = supplierEntries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
       if (qty <= 0) return null;
 
+      let totalPremium = 0;
+      for (const entry of supplierEntries) {
+        const version = getEffectiveConstantsForPeriod(versions, entry.date);
+        const constants = toCalculationConstants(version);
+        totalPremium += quarterlyTotalPremium(Number(entry.qty || 0), constants.premiumPerLiter);
+      }
+
       return {
         serialNum: serialNum++,
         supplierId: supplier.id,
@@ -179,8 +272,8 @@ export async function getQuarterlySummaries(options: {
         lastName: supplier.last_name,
         qty,
         cows: supplier.number_of_cows ?? 0,
-        premiumPerL: constants.premiumPerLiter,
-        totalPremium: quarterlyTotalPremium(qty, constants.premiumPerLiter),
+        premiumPerL: totalPremium / qty,
+        totalPremium,
       };
     })
     .filter((item): item is QuarterlySummaryRow => item !== null);

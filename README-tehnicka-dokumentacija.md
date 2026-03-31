@@ -304,7 +304,10 @@ Repository:
 Karakteristike:
 
 - vise verzija parametara po `valid_from`
-- sistem automatski bira efektivnu verziju za dati `YYYY-MM`
+- `valid_from` je datum u formatu `YYYY-MM-DD`
+- dozvoljeni pocetci verzije su 1. i 16. u mesecu
+- sistem automatski bira efektivnu verziju za dati datum, ukljucujuci i promene od sredine meseca
+- settings UI bira `mesec + prvi/drugi deo`, a to se prevodi u `YYYY-MM-01` ili `YYYY-MM-16`
 - najmanje jedna verzija mora da ostane u bazi
 
 ## 8. Produkcija i prodaja - tehnicki status
@@ -382,6 +385,7 @@ Postojece SQL skripte:
 - `011_monthly_summary_overrides.sql`
 - `012_monthly_summary_overrides_price_with_tax.sql`
 - `013_monthly_summary_overrides_recreate.sql`
+- `014_calculation_constants_mid_month_effective_dates.sql`
 
 Svrha migracija:
 
@@ -396,6 +400,7 @@ Svrha migracija:
 - DB-backed override vrednosti za mesecni pregled po `year_month + period + supplier`
 - migracija sa override-a `cena po kolicini` na override `cena sa PDV`, uz preracun izvedenih cena
 - cista recreate skripta za `monthly_summary_overrides` ako se stara tabela brise rucno
+- migracija `valid_from` polja parametara obracuna sa `YYYY-MM` na `YYYY-MM-DD`, uz podrsku za sredinu meseca
 
 Napomena:
 

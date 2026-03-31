@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import type { MonthlySummaryRow } from '@/types/domain';
 import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
-import { yearMonthFrom } from '@/lib/utils/year-month';
 
 const A4_WIDTH = 595;
 const A4_HEIGHT = 842;
@@ -324,8 +322,7 @@ export async function GET(request: Request) {
     const city = searchParams.get('city') || undefined;
     const language = normalizeExportLanguage(searchParams.get('lang'));
 
-    const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
-    const summaries = (await getMonthlySummaries({ year, month, city, period, constants })).filter(
+    const summaries = (await getMonthlySummaries({ year, month, city, period })).filter(
       (row) => Number.isFinite(row.qty) && row.qty > 0
     );
 

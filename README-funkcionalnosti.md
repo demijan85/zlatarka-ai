@@ -215,7 +215,7 @@ Stranica: `/settings`
 
 Namena:
 
-- upravljanje verzijama finansijskih parametara koji vaze od odredjenog meseca
+- upravljanje verzijama finansijskih parametara koji vaze od odredjenog datuma
 
 Parametri:
 
@@ -228,8 +228,9 @@ Parametri:
 Glavne funkcionalnosti:
 
 - cuvanje vise verzija parametara
-- izbor od kog meseca verzija vazi
-- pregled aktivne verzije za konkretan mesec
+- izbor meseca i dela meseca od kog verzija vazi
+- podrzan je i drugi deo meseca, tako da 1-15 i 16-kraj mogu imati razlicite parametre
+- pregled aktivne verzije za konkretan mesec i izabrani deo meseca
 - brisanje stare verzije, uz uslov da bar jedna ostane
 
 #### 3.1.8 Korekcije

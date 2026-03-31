@@ -10,7 +10,7 @@ import {
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { yearMonthFrom } from '@/lib/utils/year-month';
+import { periodStartDate } from '@/lib/utils/period';
 
 async function parseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -61,15 +61,22 @@ export default function QuarterlyViewPage() {
   const alignRight = { textAlign: 'right' as const };
 
   const startMonth = (quarter - 1) * 3 + 1;
-  const currentYearMonth = useMemo(() => yearMonthFrom(year, startMonth), [year, startMonth]);
   const orderedVersions = useMemo(
     () => sortVersions(versionsData.length ? versionsData : [defaultVersionedConstants]),
     [versionsData]
   );
-  const effectiveVersion = useMemo(
-    () => getEffectiveConstantsForPeriod(orderedVersions, currentYearMonth),
-    [orderedVersions, currentYearMonth]
-  );
+  const constantsLabel = useMemo(() => {
+    const appliedVersions = new Set<string>();
+
+    for (let monthIndex = startMonth; monthIndex < startMonth + 3; monthIndex += 1) {
+      appliedVersions.add(getEffectiveConstantsForPeriod(orderedVersions, periodStartDate(year, monthIndex, 'first')).validFrom);
+      appliedVersions.add(getEffectiveConstantsForPeriod(orderedVersions, periodStartDate(year, monthIndex, 'second')).validFrom);
+    }
+
+    const labels = [...appliedVersions].sort();
+    if (labels.length <= 1) return labels[0] ?? defaultVersionedConstants.validFrom;
+    return `${labels[0]} / ${labels[labels.length - 1]}`;
+  }, [orderedVersions, startMonth, year]);
 
   function exportXlsx() {
     const params = new URLSearchParams({
@@ -98,7 +105,7 @@ export default function QuarterlyViewPage() {
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0 }}>{t('quarterly.title')}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
-          {t('quarterly.constantsUsed')}: <strong>{effectiveVersion.validFrom}</strong>
+          {t('quarterly.constantsUsed')}: <strong>{constantsLabel}</strong>
         </div>
 
         <div className="control-row">

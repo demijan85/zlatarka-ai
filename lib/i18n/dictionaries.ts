@@ -488,8 +488,9 @@ const srCyrl: Dictionary = {
   'quarterly.constantsUsed': 'Премија важећа од',
 
   'settings.title': 'Параметри обрачуна',
-  'settings.subtitle': 'Верзије параметара по периоду важења (YYYY-MM).',
-  'settings.validFrom': 'Важи од (YYYY-MM)',
+  'settings.subtitle': 'Верзије параметара по датуму важења. Промену можете везати за 1. или 16. у месецу.',
+  'settings.validFrom': 'Важи од (YYYY-MM-DD)',
+  'settings.validFromHint': 'Дозвољени су само 1. и 16. дан у месецу.',
   'settings.pricePerFatPct': 'Цена по мм',
   'settings.taxPercentage': 'ПДВ (%)',
   'settings.stimLowTh': 'Доњи праг стимулације (Л)',
@@ -996,8 +997,9 @@ const en: Dictionary = {
   'quarterly.constantsUsed': 'Premium valid from',
 
   'settings.title': 'Calculation Settings',
-  'settings.subtitle': 'Versioned constants by effective period (YYYY-MM).',
-  'settings.validFrom': 'Valid from (YYYY-MM)',
+  'settings.subtitle': 'Versioned constants by effective date. Changes can start on the 1st or 16th day of the month.',
+  'settings.validFrom': 'Valid from (YYYY-MM-DD)',
+  'settings.validFromHint': 'Only the 1st and 16th day of the month are allowed.',
   'settings.pricePerFatPct': 'Price per mm',
   'settings.taxPercentage': 'Tax (%)',
   'settings.stimLowTh': 'Stimulation low threshold (L)',

@@ -2,6 +2,8 @@ import {
   defaultCalculationConstants,
   defaultVersionedConstants,
   getEffectiveConstantsForPeriod,
+  normalizeCalculationEffectiveDate,
+  normalizeCalculationValidFrom,
   normalizeVersionedConstants,
   sortVersions,
   toCalculationConstants,
@@ -9,7 +11,6 @@ import {
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { normalizeYearMonth } from '@/lib/utils/year-month';
 
 type ConstantVersionRow = {
   valid_from: string;
@@ -107,7 +108,7 @@ export async function upsertCalculationConstantVersion(
 }
 
 export async function deleteCalculationConstantVersion(validFrom: string): Promise<void> {
-  const normalized = normalizeYearMonth(validFrom);
+  const normalized = normalizeCalculationValidFrom(validFrom);
   const supabase = createServerSupabaseClient();
 
   const { count, error: countError } = await supabase
@@ -126,11 +127,28 @@ export async function deleteCalculationConstantVersion(validFrom: string): Promi
 export async function getEffectiveCalculationVersionForYearMonth(
   yearMonth: string
 ): Promise<VersionedCalculationConstants> {
-  const normalized = normalizeYearMonth(yearMonth);
+  const normalized = normalizeCalculationEffectiveDate(yearMonth);
   const versions = await listCalculationConstantVersions();
 
   if (!versions.length) return defaultVersionedConstants;
   return getEffectiveConstantsForPeriod(versions, normalized);
+}
+
+export async function getEffectiveCalculationVersionForDate(
+  effectiveDate: string
+): Promise<VersionedCalculationConstants> {
+  const normalized = normalizeCalculationEffectiveDate(effectiveDate);
+  const versions = await listCalculationConstantVersions();
+
+  if (!versions.length) return defaultVersionedConstants;
+  return getEffectiveConstantsForPeriod(versions, normalized);
+}
+
+export async function getEffectiveCalculationConstantsForDate(
+  effectiveDate: string
+): Promise<CalculationConstants> {
+  const effective = await getEffectiveCalculationVersionForDate(effectiveDate);
+  return toCalculationConstants(effective) ?? defaultCalculationConstants;
 }
 
 export async function getEffectiveCalculationConstantsForYearMonth(
