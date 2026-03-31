@@ -15,6 +15,7 @@ import {
 import { useTranslation } from '@/lib/i18n/use-translation';
 
 type Half = 'first' | 'second';
+const EMPTY_VERSIONS: VersionedCalculationConstants[] = [];
 
 function currentDateIso(): string {
   const now = new Date();
@@ -57,6 +58,19 @@ async function fetchVersions(): Promise<VersionedCalculationConstants[]> {
   return response.json();
 }
 
+function sameVersionValues(a: VersionedCalculationConstants, b: VersionedCalculationConstants): boolean {
+  return (
+    a.validFrom === b.validFrom &&
+    a.pricePerFatPct === b.pricePerFatPct &&
+    a.taxPercentage === b.taxPercentage &&
+    a.stimulationLowThreshold === b.stimulationLowThreshold &&
+    a.stimulationHighThreshold === b.stimulationHighThreshold &&
+    a.stimulationLowAmount === b.stimulationLowAmount &&
+    a.stimulationHighAmount === b.stimulationHighAmount &&
+    a.premiumPerLiter === b.premiumPerLiter
+  );
+}
+
 export default function SettingsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -66,7 +80,7 @@ export default function SettingsPage() {
   const [editingValidFrom, setEditingValidFrom] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
-  const { data: versionsData = [], isLoading, error } = useQuery({
+  const { data: versionsData = EMPTY_VERSIONS, isLoading, error } = useQuery({
     queryKey: ['constants-versions'],
     queryFn: fetchVersions,
   });
@@ -86,6 +100,7 @@ export default function SettingsPage() {
     handleSubmit,
     reset,
     setValue,
+    getValues,
     watch,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<VersionedCalculationConstants>({
@@ -100,14 +115,23 @@ export default function SettingsPage() {
     if (editingValidFrom) {
       const editTarget = orderedVersions.find((item) => item.validFrom === editingValidFrom);
       if (editTarget) {
-        reset(editTarget);
+        if (!sameVersionValues(getValues(), editTarget)) {
+          reset(editTarget);
+        }
         return;
       }
       setEditingValidFrom(null);
     }
 
-    reset({ ...activeVersion, validFrom: validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf) });
-  }, [editingValidFrom, orderedVersions, activeVersion, selectedEffectiveHalf, selectedEffectiveYearMonth, reset]);
+    const nextValues = {
+      ...activeVersion,
+      validFrom: validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf),
+    };
+
+    if (!sameVersionValues(getValues(), nextValues)) {
+      reset(nextValues);
+    }
+  }, [activeVersion, editingValidFrom, getValues, orderedVersions, reset, selectedEffectiveHalf, selectedEffectiveYearMonth]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: VersionedCalculationConstants) => {
