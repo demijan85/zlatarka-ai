@@ -42,39 +42,55 @@ test('normalizeVersionedConstants preserves validFrom and applies normalization'
     premiumPerLiter: 19,
   });
 
-  assert.equal(normalized.validFrom, '2025-04');
+  assert.equal(normalized.validFrom, '2025-04-01');
   assert.equal(normalized.stimulationHighThreshold, 1000);
+});
+
+test('normalizeVersionedConstants preserves mid-month validFrom values', () => {
+  const normalized = normalizeVersionedConstants({
+    validFrom: '2025-04-16',
+    pricePerFatPct: 12,
+    taxPercentage: 8,
+    stimulationLowThreshold: 1000,
+    stimulationHighThreshold: 1000,
+    stimulationLowAmount: 1,
+    stimulationHighAmount: 2,
+    premiumPerLiter: 19,
+  });
+
+  assert.equal(normalized.validFrom, '2025-04-16');
 });
 
 test('sortVersions orders constants by validFrom ascending', () => {
   const versions: VersionedCalculationConstants[] = [
-    { ...defaultVersionedConstants, validFrom: '2025-06' },
-    { ...defaultVersionedConstants, validFrom: '2024-01' },
-    { ...defaultVersionedConstants, validFrom: '2025-01' },
+    { ...defaultVersionedConstants, validFrom: '2025-06-01' },
+    { ...defaultVersionedConstants, validFrom: '2024-01-01' },
+    { ...defaultVersionedConstants, validFrom: '2025-01-16' },
   ];
 
   assert.deepEqual(
     sortVersions(versions).map((item) => item.validFrom),
-    ['2024-01', '2025-01', '2025-06']
+    ['2024-01-01', '2025-01-16', '2025-06-01']
   );
 });
 
 test('getEffectiveConstantsForPeriod selects latest version not after period', () => {
   const versions: VersionedCalculationConstants[] = [
-    { ...defaultVersionedConstants, validFrom: '2024-01', premiumPerLiter: 18 },
-    { ...defaultVersionedConstants, validFrom: '2025-01', premiumPerLiter: 19 },
-    { ...defaultVersionedConstants, validFrom: '2025-07', premiumPerLiter: 21 },
+    { ...defaultVersionedConstants, validFrom: '2024-01-01', premiumPerLiter: 18 },
+    { ...defaultVersionedConstants, validFrom: '2025-01-16', premiumPerLiter: 19 },
+    { ...defaultVersionedConstants, validFrom: '2025-07-01', premiumPerLiter: 21 },
   ];
 
   assert.equal(getEffectiveConstantsForPeriod(versions, '2024-12').premiumPerLiter, 18);
+  assert.equal(getEffectiveConstantsForPeriod(versions, '2025-01-15').premiumPerLiter, 18);
   assert.equal(getEffectiveConstantsForPeriod(versions, '2025-03').premiumPerLiter, 19);
   assert.equal(getEffectiveConstantsForPeriod(versions, '2025-09').premiumPerLiter, 21);
 });
 
 test('getEffectiveConstantsForPeriod falls back to earliest version when period is before all versions', () => {
   const versions: VersionedCalculationConstants[] = [
-    { ...defaultVersionedConstants, validFrom: '2024-05', premiumPerLiter: 17 },
-    { ...defaultVersionedConstants, validFrom: '2025-01', premiumPerLiter: 19 },
+    { ...defaultVersionedConstants, validFrom: '2024-05-01', premiumPerLiter: 17 },
+    { ...defaultVersionedConstants, validFrom: '2025-01-01', premiumPerLiter: 19 },
   ];
 
   assert.equal(getEffectiveConstantsForPeriod(versions, '2024-01').premiumPerLiter, 17);
@@ -82,7 +98,7 @@ test('getEffectiveConstantsForPeriod falls back to earliest version when period 
 
 test('toCalculationConstants strips validFrom and keeps calculation fields', () => {
   const version = {
-    validFrom: '2025-03',
+    validFrom: '2025-03-01',
     pricePerFatPct: 13,
     taxPercentage: 10,
     stimulationLowThreshold: 600,

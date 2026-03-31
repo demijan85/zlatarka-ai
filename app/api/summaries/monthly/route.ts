@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getEffectiveCalculationConstantsForYearMonth } from '@/lib/repositories/calculation-constants';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
-import { yearMonthFrom } from '@/lib/utils/year-month';
 
 export async function GET(request: Request) {
   try {
@@ -14,8 +12,7 @@ export async function GET(request: Request) {
     const period = normalizePeriod(searchParams.get('period'));
     const city = searchParams.get('city') || undefined;
 
-    const constants = await getEffectiveCalculationConstantsForYearMonth(yearMonthFrom(year, month));
-    const data = await getMonthlySummaries({ year, month, city, period, constants });
+    const data = await getMonthlySummaries({ year, month, city, period });
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',

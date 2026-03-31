@@ -13,11 +13,32 @@ import {
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { yearMonthFrom } from '@/lib/utils/year-month';
+
+type Half = 'first' | 'second';
+
+function currentDateIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 function currentYearMonth(): string {
-  const now = new Date();
-  return yearMonthFrom(now.getFullYear(), now.getMonth() + 1);
+  return currentDateIso().slice(0, 7);
+}
+
+function currentHalf(): Half {
+  return Number(currentDateIso().slice(8, 10)) >= 16 ? 'second' : 'first';
+}
+
+function validFromFromParts(yearMonth: string, half: Half): string {
+  return `${yearMonth}-${half === 'second' ? '16' : '01'}`;
+}
+
+function validFromParts(validFrom: string | undefined): { yearMonth: string; half: Half } {
+  const normalized = validFrom ? validFromFromParts(validFrom.slice(0, 7), validFrom.endsWith('-16') ? 'second' : 'first') : `${currentYearMonth()}-01`;
+  return {
+    yearMonth: normalized.slice(0, 7),
+    half: normalized.endsWith('-16') ? 'second' : 'first',
+  };
 }
 
 async function readError(response: Response, fallback: string): Promise<Error> {
@@ -40,7 +61,8 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const [selectedYearMonth, setSelectedYearMonth] = useState(currentYearMonth());
+  const [selectedEffectiveYearMonth, setSelectedEffectiveYearMonth] = useState(currentYearMonth());
+  const [selectedEffectiveHalf, setSelectedEffectiveHalf] = useState<Half>(currentHalf());
   const [editingValidFrom, setEditingValidFrom] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
@@ -55,19 +77,24 @@ export default function SettingsPage() {
   );
 
   const activeVersion = useMemo(
-    () => getEffectiveConstantsForPeriod(orderedVersions, selectedYearMonth),
-    [orderedVersions, selectedYearMonth]
+    () => getEffectiveConstantsForPeriod(orderedVersions, validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf)),
+    [orderedVersions, selectedEffectiveHalf, selectedEffectiveYearMonth]
   );
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<VersionedCalculationConstants>({
     resolver: zodResolver(versionedCalculationConstantsSchema),
     defaultValues: activeVersion,
   });
+
+  const watchedValidFrom = watch('validFrom');
+  const selectedValidFrom = validFromParts(watchedValidFrom);
 
   useEffect(() => {
     if (editingValidFrom) {
@@ -79,8 +106,8 @@ export default function SettingsPage() {
       setEditingValidFrom(null);
     }
 
-    reset({ ...activeVersion, validFrom: selectedYearMonth });
-  }, [editingValidFrom, orderedVersions, activeVersion, selectedYearMonth, reset]);
+    reset({ ...activeVersion, validFrom: validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf) });
+  }, [editingValidFrom, orderedVersions, activeVersion, selectedEffectiveHalf, selectedEffectiveYearMonth, reset]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: VersionedCalculationConstants) => {
@@ -121,13 +148,13 @@ export default function SettingsPage() {
 
   function startNewVersion() {
     setEditingValidFrom(null);
-    reset({ ...activeVersion, validFrom: selectedYearMonth });
+    reset({ ...activeVersion, validFrom: validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf) });
   }
 
   function useDefaults() {
     setEditingValidFrom(null);
     reset({
-      validFrom: selectedYearMonth,
+      validFrom: validFromFromParts(selectedEffectiveYearMonth, selectedEffectiveHalf),
       ...defaultCalculationConstants,
     });
   }
@@ -149,9 +176,17 @@ export default function SettingsPage() {
           <input
             className="input"
             type="month"
-            value={selectedYearMonth}
-            onChange={(event) => setSelectedYearMonth(event.target.value)}
+            value={selectedEffectiveYearMonth}
+            onChange={(event) => setSelectedEffectiveYearMonth(event.target.value)}
           />
+          <select
+            className="input"
+            value={selectedEffectiveHalf}
+            onChange={(event) => setSelectedEffectiveHalf(event.target.value as Half)}
+          >
+            <option value="first">{t('monthly.firstHalf')}</option>
+            <option value="second">{t('monthly.secondHalf')}</option>
+          </select>
           <span className="badge">
             {t('settings.activeVersion')}: {activeVersion.validFrom}
           </span>
@@ -164,7 +199,24 @@ export default function SettingsPage() {
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'grid', gap: 10 }}>
           <div className="control-row">
             <label>{t('settings.validFrom')}</label>
-            <input className="input" type="month" {...register('validFrom')} />
+            <input
+              className="input"
+              type="month"
+              value={selectedValidFrom.yearMonth}
+              onChange={(event) => setValue('validFrom', validFromFromParts(event.target.value, selectedValidFrom.half), { shouldDirty: true })}
+            />
+            <select
+              className="input"
+              value={selectedValidFrom.half}
+              onChange={(event) => setValue('validFrom', validFromFromParts(selectedValidFrom.yearMonth, event.target.value as Half), { shouldDirty: true })}
+            >
+              <option value="first">{t('monthly.firstHalf')}</option>
+              <option value="second">{t('monthly.secondHalf')}</option>
+            </select>
+            <input type="hidden" {...register('validFrom')} />
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {t('settings.validFromHint')}
           </div>
 
           <div className="control-row">
