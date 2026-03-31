@@ -1,10 +1,81 @@
 import { average, monthlyTotalAmount } from '@/lib/calculations/formulas';
-import { getEffectiveConstantsForPeriod, toCalculationConstants } from '@/lib/constants/calculation';
+import { getEffectiveConstantsForPeriod, toCalculationConstants, type VersionedCalculationConstants } from '@/lib/constants/calculation';
 import { listCalculationConstantVersions } from '@/lib/repositories/calculation-constants';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getMonthBounds } from '@/lib/utils/date';
-import { yearMonthFrom } from '@/lib/utils/year-month';
 import type { DailyEntry, Supplier, SupplierHistory, SupplierHistoryDay, SupplierHistoryMonth } from '@/types/domain';
+
+function summarizeMonthEntries(
+  entries: DailyEntry[],
+  versions: VersionedCalculationConstants[]
+): SupplierHistoryMonth & { constantsValidFrom: string } {
+  const fatValues = entries.map((item) => item.fat_pct).filter((value): value is number => value !== null && value !== undefined);
+  const qty = entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const fatPct = average(fatValues);
+
+  if (qty <= 0) {
+    return {
+      month: Number(entries[0]?.date.slice(5, 7) ?? 0),
+      qty,
+      fatPct,
+      pricePerQty: 0,
+      priceWithTax: 0,
+      stimulation: 0,
+      totalAmount: 0,
+      activeDays: entries.filter((item) => Number(item.qty || 0) > 0 || item.fat_pct !== null).length,
+      measurementCount: fatValues.length,
+      constantsValidFrom: versions[0]?.validFrom ?? '',
+    };
+  }
+
+  const grouped = new Map<string, { version: VersionedCalculationConstants; entries: DailyEntry[] }>();
+  for (const entry of entries) {
+    const version = getEffectiveConstantsForPeriod(versions, entry.date);
+    const existing = grouped.get(version.validFrom);
+    if (existing) {
+      existing.entries.push(entry);
+      continue;
+    }
+    grouped.set(version.validFrom, { version, entries: [entry] });
+  }
+
+  let milkNetAmount = 0;
+  let milkGrossAmount = 0;
+  let stimulationAmount = 0;
+  let totalAmount = 0;
+
+  for (const group of grouped.values()) {
+    const groupQty = group.entries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+    const groupFatValues = group.entries
+      .map((item) => item.fat_pct)
+      .filter((value): value is number => value !== null && value !== undefined);
+    const groupFatPct = average(groupFatValues);
+    const constants = toCalculationConstants(group.version);
+    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants);
+
+    milkNetAmount += groupQty * totals.pricePerQty;
+    milkGrossAmount += groupQty * totals.priceWithTax;
+    stimulationAmount += groupQty * totals.stimulation;
+    totalAmount += totals.totalAmount;
+  }
+
+  const versionLabels = [...grouped.keys()].sort();
+  const constantsValidFrom =
+    versionLabels.length <= 1 ? (versionLabels[0] ?? '') : `${versionLabels[0]} / ${versionLabels[versionLabels.length - 1]}`;
+
+  return {
+    month: Number(entries[0]?.date.slice(5, 7) ?? 0),
+    qty,
+    fatPct,
+    pricePerQty: milkNetAmount / qty,
+    priceWithTax: milkGrossAmount / qty,
+    stimulation: stimulationAmount / qty,
+    totalAmount,
+    activeDays: entries.filter((item) => Number(item.qty || 0) > 0 || item.fat_pct !== null).length,
+    measurementCount: fatValues.length,
+    constantsValidFrom,
+  };
+}
 
 async function fetchSupplierById(supplierId: number): Promise<Supplier | null> {
   const supabase = createServerSupabaseClient();
@@ -51,24 +122,19 @@ export async function getSupplierHistory(supplierId: number, year: number): Prom
   const months: SupplierHistoryMonth[] = Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
     const monthEntries = entriesByMonth.get(month) ?? [];
-    const fatValues = monthEntries.map((item) => item.fat_pct).filter((value): value is number => value !== null && value !== undefined);
-    const qty = monthEntries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-    const fatPct = average(fatValues);
-    const effectiveVersion = getEffectiveConstantsForPeriod(versions, yearMonthFrom(year, month));
-    const constants = toCalculationConstants(effectiveVersion);
-    const totals = monthlyTotalAmount(qty, fatPct, constants);
+    const summarized = summarizeMonthEntries(monthEntries, versions);
 
     return {
       month,
-      qty,
-      fatPct,
-      pricePerQty: totals.pricePerQty,
-      priceWithTax: totals.priceWithTax,
-      stimulation: totals.stimulation,
-      totalAmount: totals.totalAmount,
-      activeDays: monthEntries.filter((item) => Number(item.qty || 0) > 0 || item.fat_pct !== null).length,
-      measurementCount: fatValues.length,
-      constantsValidFrom: effectiveVersion.validFrom,
+      qty: summarized.qty,
+      fatPct: summarized.fatPct,
+      pricePerQty: summarized.pricePerQty,
+      priceWithTax: summarized.priceWithTax,
+      stimulation: summarized.stimulation,
+      totalAmount: summarized.totalAmount,
+      activeDays: summarized.activeDays,
+      measurementCount: summarized.measurementCount,
+      constantsValidFrom: summarized.constantsValidFrom,
     };
   });
 
