@@ -229,6 +229,9 @@ Mesecni i kvartalni pregledi:
 
 - `app/monthly-view/page.tsx`
 - `app/quarterly-view/page.tsx`
+- kvartalni pregled koristi snapshot payload sa `rows`, `coveredThroughDate`, `expectedEndDate` i `isComplete`
+- kada poslednji dnevni unos ne pokriva kraj kvartala, UI prikazuje upozorenje, a XLSX export dodaje datum pokrivenosti u ime fajla i zaglavlje dokumenta
+- `lib/repositories/summaries.ts` paginira citanje `daily_entries` u batch-evima od 1000 redova da mesecni i kvartalni pregledi ne ostanu odseceni kada Supabase vrati samo prvi page
 
 Repository:
 
@@ -435,7 +438,9 @@ Napomena:
 - `GET /api/summaries/monthly/receipts/pdf`
 - `GET /api/summaries/monthly/payments`
 - `GET /api/summaries/quarterly`
+  Vraca snapshot objekat sa redovima i metapodacima o pokrivenosti kvartala.
 - `GET /api/summaries/quarterly/export`
+  Za parcijalne kvartale generise XLSX sa napomenom `OBUHVACENO DO` i imenom fajla `quarterly_summary_<godina>_Q<kvartal>_through_<datum>.xlsx`.
 
 ### 11.4 Parametri i administracija
 

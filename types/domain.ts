@@ -75,6 +75,13 @@ export type QuarterlySummaryRow = {
   totalPremium: number;
 };
 
+export type QuarterlySummarySnapshot = {
+  rows: QuarterlySummaryRow[];
+  coveredThroughDate: string | null;
+  expectedEndDate: string;
+  isComplete: boolean;
+};
+
 export type SupplierHistoryMonth = {
   month: number;
   qty: number;

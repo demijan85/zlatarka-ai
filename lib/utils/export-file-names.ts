@@ -35,3 +35,17 @@ export function getMonthlyExportFileName(
   if (kind === 'receipts') return `mesecne_priznanice_${year}_${monthPart}${periodPart}.pdf`;
   return `placanja_otkup_${year}_${monthPart}${periodPart}.xml`;
 }
+
+export function getQuarterlyExportFileName(
+  year: number,
+  quarter: number,
+  coveredThroughDate: string | null,
+  expectedEndDate: string
+): string {
+  const baseName = `quarterly_summary_${year}_Q${quarter}`;
+  if (coveredThroughDate && coveredThroughDate < expectedEndDate) {
+    return `${baseName}_through_${coveredThroughDate}.xlsx`;
+  }
+
+  return `${baseName}.xlsx`;
+}

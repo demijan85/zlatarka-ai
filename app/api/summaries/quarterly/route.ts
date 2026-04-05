@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getQuarterlySummaries } from '@/lib/repositories/summaries';
+import { getQuarterlySummarySnapshot } from '@/lib/repositories/summaries';
 import { parseQuarter, parseYear } from '@/lib/utils/date';
 
 export async function GET(request: Request) {
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const year = parseYear(searchParams.get('year'), now.getFullYear());
     const quarter = parseQuarter(searchParams.get('quarter'), currentQuarter);
 
-    const data = await getQuarterlySummaries({ year, quarter });
+    const data = await getQuarterlySummarySnapshot({ year, quarter });
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',

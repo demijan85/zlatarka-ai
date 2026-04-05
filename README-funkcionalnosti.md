@@ -138,13 +138,16 @@ Stranica: `/quarterly-view`
 
 Namena:
 
-- pregled kvartalne stimulacije po proizvodjacu
+- pregled kvartalne premije po proizvodjacu
 
 Glavne funkcionalnosti:
 
 - izbor godine i kvartala
 - prikaz ukupne kolicine po proizvodjacu
 - obracun kvartalne premije po litru
+- pregledi koriste kompletan skup dnevnih unosa i kada period ima vise od 1000 redova u bazi
+- ako podaci jos ne pokrivaju ceo kvartal, prikazuje se datum do kog su unosi obuhvaceni
+- parcijalni XLSX izvoz dobija naziv sa suffix-om `through_YYYY-MM-DD` da bude jasno da nije finalan presek
 - izvoz kvartalnog pregleda u XLSX
 
 #### 3.1.5 Pregled po proizvodjacu
