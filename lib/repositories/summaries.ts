@@ -10,7 +10,7 @@ import { listMonthlySummaryOverrides } from '@/lib/repositories/monthly-summary-
 import { getMonthBounds, getQuarterBounds } from '@/lib/utils/date';
 import { filterDatesByPeriod, type Period } from '@/lib/utils/period';
 import { yearMonthFrom } from '@/lib/utils/year-month';
-import type { DailyEntry, MonthlySummaryRow, QuarterlySummaryRow, Supplier } from '@/types/domain';
+import type { DailyEntry, MonthlySummaryRow, QuarterlySummaryRow, QuarterlySummarySnapshot, Supplier } from '@/types/domain';
 
 function summarizeEntriesWithVersions(
   entries: DailyEntry[],
@@ -164,15 +164,30 @@ async function fetchEntriesByRange(
   if (!supplierIds.length) return [];
 
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from('daily_entries')
-    .select('*')
-    .in('supplier_id', supplierIds)
-    .gte('date', startDate)
-    .lte('date', endDate);
+  const pageSize = 1000;
+  const rows: DailyEntry[] = [];
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DailyEntry[];
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('daily_entries')
+      .select('*')
+      .in('supplier_id', supplierIds)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as DailyEntry[];
+    rows.push(...page);
+
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
 }
 
 export async function getMonthlySummaries(options: {
@@ -230,17 +245,37 @@ export async function getQuarterlySummaries(options: {
   quarter: number;
   versions?: VersionedCalculationConstants[];
 }): Promise<QuarterlySummaryRow[]> {
+  const snapshot = await getQuarterlySummarySnapshot(options);
+  return snapshot.rows;
+}
+
+export async function getQuarterlySummarySnapshot(options: {
+  year: number;
+  quarter: number;
+  versions?: VersionedCalculationConstants[];
+}): Promise<QuarterlySummarySnapshot> {
   const [suppliers, versions] = await Promise.all([
     fetchSuppliers(),
     options.versions ? Promise.resolve(options.versions) : listCalculationConstantVersions(),
   ]);
-  if (!suppliers.length) return [];
-
   const { startDate, endDate } = getQuarterBounds(options.year, options.quarter);
+  if (!suppliers.length) {
+    return {
+      rows: [],
+      coveredThroughDate: null,
+      expectedEndDate: endDate,
+      isComplete: false,
+    };
+  }
+
   const entries = await fetchEntriesByRange(
     suppliers.map((item) => item.id),
     startDate,
     endDate
+  );
+  const coveredThroughDate = entries.reduce<string | null>(
+    (latest, entry) => (latest === null || entry.date > latest ? entry.date : latest),
+    null
   );
 
   const bySupplier: Record<number, DailyEntry[]> = {};
@@ -250,7 +285,7 @@ export async function getQuarterlySummaries(options: {
   }
 
   let serialNum = 1;
-  return suppliers
+  const rows = suppliers
     .map((supplier) => {
       const supplierEntries = bySupplier[supplier.id] ?? [];
       if (!supplierEntries.length) return null;
@@ -277,4 +312,11 @@ export async function getQuarterlySummaries(options: {
       };
     })
     .filter((item): item is QuarterlySummaryRow => item !== null);
+
+  return {
+    rows,
+    coveredThroughDate,
+    expectedEndDate: endDate,
+    isComplete: coveredThroughDate === endDate,
+  };
 }

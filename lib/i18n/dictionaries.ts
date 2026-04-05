@@ -486,6 +486,8 @@ const srCyrl: Dictionary = {
   'quarterly.premiumPerL': 'Премија/Л',
   'quarterly.totalPremium': 'Укупна премија',
   'quarterly.constantsUsed': 'Премија важећа од',
+  'quarterly.coveredThrough': 'Обухваћено до',
+  'quarterly.partialData': 'Приказ и XLSX извоз тренутно обухватају уносе само до приказаног датума.',
 
   'settings.title': 'Параметри обрачуна',
   'settings.subtitle': 'Верзије параметара по датуму важења. Промену можете везати за 1. или 16. у месецу.',
@@ -995,6 +997,8 @@ const en: Dictionary = {
   'quarterly.premiumPerL': 'Premium/L',
   'quarterly.totalPremium': 'Total premium',
   'quarterly.constantsUsed': 'Premium valid from',
+  'quarterly.coveredThrough': 'Covered through',
+  'quarterly.partialData': 'The view and XLSX export currently include entries only through the shown date.',
 
   'settings.title': 'Calculation Settings',
   'settings.subtitle': 'Versioned constants by effective date. Changes can start on the 1st or 16th day of the month.',
