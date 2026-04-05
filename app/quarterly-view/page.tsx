@@ -2,14 +2,17 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { QuarterlySummaryRow } from '@/types/domain';
+import type { QuarterlySummarySnapshot } from '@/types/domain';
 import {
   defaultVersionedConstants,
   getEffectiveConstantsForPeriod,
   sortVersions,
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
+import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { getQuarterBounds } from '@/lib/utils/date';
+import { getQuarterlyExportFileName } from '@/lib/utils/export-file-names';
 import { periodStartDate } from '@/lib/utils/period';
 
 async function parseError(response: Response, fallback: string): Promise<Error> {
@@ -22,7 +25,7 @@ async function parseError(response: Response, fallback: string): Promise<Error> 
   return new Error(fallback);
 }
 
-async function fetchQuarterly(year: number, quarter: number): Promise<QuarterlySummaryRow[]> {
+async function fetchQuarterly(year: number, quarter: number): Promise<QuarterlySummarySnapshot> {
   const params = new URLSearchParams({
     year: String(year),
     quarter: String(quarter),
@@ -40,15 +43,16 @@ async function fetchConstantVersions(): Promise<VersionedCalculationConstants[]>
 
 export default function QuarterlyViewPage() {
   const now = new Date();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
   const [year, setYear] = useState(now.getFullYear());
   const [quarter, setQuarter] = useState(currentQuarter);
 
-  const { data: rows = [], isLoading, error } = useQuery({
+  const { data: snapshot, isLoading, error } = useQuery({
     queryKey: ['quarterly', year, quarter],
     queryFn: () => fetchQuarterly(year, quarter),
   });
+  const rows = snapshot?.rows ?? [];
 
   const { data: versionsData = [] } = useQuery({
     queryKey: ['constants-versions'],
@@ -59,6 +63,11 @@ export default function QuarterlyViewPage() {
   const totalPremium = rows.reduce((sum, row) => sum + row.totalPremium, 0);
   const alignCenter = { textAlign: 'center' as const };
   const alignRight = { textAlign: 'right' as const };
+  const locale = localeForLanguage(language);
+  const { expectedEndDate } = useMemo(() => {
+    const bounds = getQuarterBounds(year, quarter);
+    return { expectedEndDate: bounds.endDate };
+  }, [quarter, year]);
 
   const startMonth = (quarter - 1) * 3 + 1;
   const orderedVersions = useMemo(
@@ -78,6 +87,11 @@ export default function QuarterlyViewPage() {
     return `${labels[0]} / ${labels[labels.length - 1]}`;
   }, [orderedVersions, startMonth, year]);
 
+  const coveredThroughLabel = useMemo(() => {
+    if (!snapshot?.coveredThroughDate) return null;
+    return new Date(`${snapshot.coveredThroughDate}T00:00:00`).toLocaleDateString(locale);
+  }, [locale, snapshot?.coveredThroughDate]);
+
   function exportXlsx() {
     const params = new URLSearchParams({
       year: String(year),
@@ -91,7 +105,12 @@ export default function QuarterlyViewPage() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `quarterly_summary_${year}_Q${quarter}.xlsx`;
+        link.download = getQuarterlyExportFileName(
+          year,
+          quarter,
+          snapshot?.coveredThroughDate ?? null,
+          snapshot?.expectedEndDate ?? expectedEndDate
+        );
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -107,6 +126,20 @@ export default function QuarterlyViewPage() {
         <div className="muted" style={{ fontSize: 12 }}>
           {t('quarterly.constantsUsed')}: <strong>{constantsLabel}</strong>
         </div>
+        {!snapshot?.isComplete && coveredThroughLabel ? (
+          <div
+            style={{
+              borderRadius: 8,
+              padding: '10px 12px',
+              background: '#fff8e1',
+              border: '1px solid #facc15',
+              color: '#854d0e',
+              fontSize: 13,
+            }}
+          >
+            <strong>{t('quarterly.coveredThrough')}:</strong> {coveredThroughLabel}. {t('quarterly.partialData')}
+          </div>
+        ) : null}
 
         <div className="control-row">
           <select className="input" value={year} onChange={(e) => setYear(Number(e.target.value))}>

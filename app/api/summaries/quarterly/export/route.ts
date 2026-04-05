@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
-import { getQuarterlySummaries } from '@/lib/repositories/summaries';
+import { getQuarterlySummarySnapshot } from '@/lib/repositories/summaries';
 import { parseQuarter, parseYear } from '@/lib/utils/date';
+import { getQuarterlyExportFileName } from '@/lib/utils/export-file-names';
 
 export async function GET(request: Request) {
   try {
@@ -11,7 +12,8 @@ export async function GET(request: Request) {
     const year = parseYear(searchParams.get('year'), now.getFullYear());
     const quarter = parseQuarter(searchParams.get('quarter'), currentQuarter);
 
-    const summaries = await getQuarterlySummaries({ year, quarter });
+    const snapshot = await getQuarterlySummarySnapshot({ year, quarter });
+    const summaries = snapshot.rows;
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Quarterly Summary');
@@ -60,6 +62,13 @@ export async function GET(request: Request) {
     titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
     titleRow.height = 24;
 
+    if (!snapshot.isComplete && snapshot.coveredThroughDate) {
+      const coverageRow = sheet.addRow([`OBUHVACENO DO: ${snapshot.coveredThroughDate}`]);
+      sheet.mergeCells(`A${coverageRow.number}:G${coverageRow.number}`);
+      coverageRow.getCell(1).font = { italic: true, size: 10 };
+      coverageRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    }
+
     sheet.addRow([]);
 
     const headerRow = sheet.addRow(['RB', 'Prezime', 'Ime', 'Kolicina', 'Broj krava', 'Premija/L', 'Ukupno']);
@@ -95,10 +104,11 @@ export async function GET(request: Request) {
     ];
 
     const buffer = await workbook.xlsx.writeBuffer();
+    const fileName = getQuarterlyExportFileName(year, quarter, snapshot.coveredThroughDate, snapshot.expectedEndDate);
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="quarterly_summary_${year}_Q${quarter}.xlsx"`,
+        'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
   } catch (error) {
