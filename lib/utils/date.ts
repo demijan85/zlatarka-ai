@@ -6,6 +6,17 @@ export function toDateString(year: number, month: number, day: number): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+export function formatIsoDateForLocale(value: string, locale: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString(locale);
+}
+
+export function formatIsoDateLabelForLocale(value: string, locale: string): string {
+  return value
+    .split(' / ')
+    .map((part) => formatIsoDateForLocale(part, locale))
+    .join(' / ');
+}
+
 export function getMonthBounds(year: number, month: number): { startDate: string; endDate: string } {
   if (!Number.isInteger(year)) throw new Error('Invalid year');
   if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error('Invalid month');
