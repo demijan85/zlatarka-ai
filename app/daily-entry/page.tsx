@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog } from '@/components/layout/confirm-dialog';
 import { useNavigationGuard } from '@/components/layout/navigation-guard';
-import { localeForLanguage } from '@/lib/i18n/locale';
+import { inputLocaleForLanguage, localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { formatIsoDateForSerbianInput, parseSerbianDateInput } from '@/lib/utils/date';
+import { formatIsoDateForLocale } from '@/lib/utils/date';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 import type { DailyEntry, DailyIntakeLock, Supplier } from '@/types/domain';
 
@@ -18,7 +18,6 @@ type Period = 'FIRST_HALF' | 'SECOND_HALF' | 'FULL';
 type QualityDraftRow = {
   id?: number;
   date: string;
-  dateInput: string;
   fat_pct: string;
 };
 
@@ -63,6 +62,15 @@ function defaultQualityDateForPeriod(year: number, month: number, period: Period
   return toDate(year, month, period === 'SECOND_HALF' ? 16 : 1);
 }
 
+function defaultQualityFatForRows(rows: QualityDraftRow[]): string {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const fat = rows[index]?.fat_pct?.trim();
+    if (fat) return fat;
+  }
+
+  return '3.8';
+}
+
 function getDefaultPeriod(dayOfMonth: number): Period {
   return dayOfMonth <= 15 ? 'FIRST_HALF' : 'SECOND_HALF';
 }
@@ -102,6 +110,7 @@ export default function DailyEntryPage() {
   const { t, language } = useTranslation();
   const { setGuard, requestNavigation } = useNavigationGuard();
   const locale = localeForLanguage(language);
+  const inputLocale = inputLocaleForLanguage(language);
   const router = useRouter();
 
   const [year, setYear] = useState(now.getFullYear());
@@ -122,6 +131,7 @@ export default function DailyEntryPage() {
 
   const [qualitySupplier, setQualitySupplier] = useState<Supplier | null>(null);
   const [qualityRows, setQualityRows] = useState<QualityDraftRow[]>([]);
+  const qualityDateInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
   const [correctionDraft, setCorrectionDraft] = useState<{
     supplierId: number;
@@ -691,12 +701,7 @@ export default function DailyEntryPage() {
 
     const baseRows = entries
       .filter((item) => item.supplier_id === supplier.id && item.fat_pct !== null)
-      .map((item) => ({
-        id: item.id,
-        date: item.date,
-        dateInput: formatIsoDateForSerbianInput(item.date),
-        fat_pct: String(item.fat_pct ?? ''),
-      }))
+      .map((item) => ({ id: item.id, date: item.date, fat_pct: String(item.fat_pct ?? '') }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     setQualityRows(
@@ -705,11 +710,23 @@ export default function DailyEntryPage() {
         : [
             {
               date: defaultQualityDateForPeriod(year, month, period),
-              dateInput: formatIsoDateForSerbianInput(defaultQualityDateForPeriod(year, month, period)),
-              fat_pct: '3.8',
+              fat_pct: defaultQualityFatForRows(baseRows),
             },
           ]
     );
+  }
+
+  function openQualityDatePicker(index: number) {
+    const input = qualityDateInputRefs.current[index];
+    if (!input || editingDisabled) return;
+
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
   }
 
   const qualityMutation = useMutation({
@@ -1222,24 +1239,48 @@ export default function DailyEntryPage() {
             <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflow: 'auto' }}>
               {qualityRows.map((row, index) => (
                 <div className="control-row" key={`${row.id ?? 'new'}-${index}`}>
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="d.m.gggg."
-                    value={row.dateInput}
-                    disabled={editingDisabled}
-                    onChange={(e) => {
-                      const next = [...qualityRows];
-                      const dateInput = e.target.value;
-                      next[index] = {
-                        ...next[index],
-                        dateInput,
-                        date: parseSerbianDateInput(dateInput) ?? '',
-                      };
-                      setQualityRows(next);
-                    }}
-                  />
+                  <div style={{ position: 'relative', minWidth: 150, flex: '1 1 170px' }}>
+                    <button
+                      type="button"
+                      className="input"
+                      disabled={editingDisabled}
+                      onClick={() => openQualityDatePicker(index)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        width: '100%',
+                        color: row.date ? undefined : 'var(--muted)',
+                        textAlign: 'left',
+                      }}
+                    >
+                      {row.date ? formatIsoDateForLocale(row.date, locale) : 'dd.mm.gggg.'}
+                    </button>
+                    <input
+                      type="date"
+                      lang={inputLocale}
+                      aria-label="Datum merenja masne jedinice"
+                      ref={(element) => {
+                        qualityDateInputRefs.current[index] = element;
+                      }}
+                      value={row.date}
+                      disabled={editingDisabled}
+                      style={{
+                        position: 'absolute',
+                        width: 1,
+                        height: 1,
+                        padding: 0,
+                        border: 0,
+                        overflow: 'hidden',
+                        opacity: 0,
+                        pointerEvents: 'none',
+                      }}
+                      onChange={(e) => {
+                        const next = [...qualityRows];
+                        next[index] = { ...next[index], date: e.target.value };
+                        setQualityRows(next);
+                      }}
+                    />
+                  </div>
                   <input
                     className="input"
                     type="number"
@@ -1272,8 +1313,7 @@ export default function DailyEntryPage() {
                     ...prev,
                     {
                       date: defaultQualityDateForPeriod(year, month, period),
-                      dateInput: formatIsoDateForSerbianInput(defaultQualityDateForPeriod(year, month, period)),
-                      fat_pct: '3.8',
+                      fat_pct: defaultQualityFatForRows(prev),
                     },
                   ])
                 }
