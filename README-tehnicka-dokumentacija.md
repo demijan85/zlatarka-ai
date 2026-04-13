@@ -232,6 +232,8 @@ Mesecni i kvartalni pregledi:
 - kvartalni pregled koristi snapshot payload sa `rows`, `coveredThroughDate`, `expectedEndDate` i `isComplete`
 - kada poslednji dnevni unos ne pokriva kraj kvartala, UI prikazuje upozorenje, a XLSX export dodaje datum pokrivenosti u ime fajla i zaglavlje dokumenta
 - `lib/repositories/summaries.ts` paginira citanje `daily_entries` u batch-evima od 1000 redova da mesecni i kvartalni pregledi ne ostanu odseceni kada Supabase vrati samo prvi page
+- PDF priznaniice koriste helper `lib/exports/monthly-receipts.ts` da prate istu racunicu kao `MonthlySummaryRow.totalAmount`: PDV se racuna samo na cenu mleka, dok je stimulacija van PDV osnovice
+- `lib/utils/date.ts` ima helper-e za formatiranje ISO datuma u lokalizovani prikaz, a `lib/i18n/locale.ts` odvaja UI locale od locale-a za nativne date/month inpute
 
 Repository:
 

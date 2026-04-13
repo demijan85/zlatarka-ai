@@ -12,7 +12,9 @@ import {
   versionedCalculationConstantsSchema,
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
+import { inputLocaleForLanguage, localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { formatIsoDateForLocale } from '@/lib/utils/date';
 
 type Half = 'first' | 'second';
 const EMPTY_VERSIONS: VersionedCalculationConstants[] = [];
@@ -72,8 +74,10 @@ function sameVersionValues(a: VersionedCalculationConstants, b: VersionedCalcula
 }
 
 export default function SettingsPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const queryClient = useQueryClient();
+  const locale = localeForLanguage(language);
+  const inputLocale = inputLocaleForLanguage(language);
 
   const [selectedEffectiveYearMonth, setSelectedEffectiveYearMonth] = useState(currentYearMonth());
   const [selectedEffectiveHalf, setSelectedEffectiveHalf] = useState<Half>(currentHalf());
@@ -200,6 +204,7 @@ export default function SettingsPage() {
           <input
             className="input"
             type="month"
+            lang={inputLocale}
             value={selectedEffectiveYearMonth}
             onChange={(event) => setSelectedEffectiveYearMonth(event.target.value)}
           />
@@ -212,7 +217,7 @@ export default function SettingsPage() {
             <option value="second">{t('monthly.secondHalf')}</option>
           </select>
           <span className="badge">
-            {t('settings.activeVersion')}: {activeVersion.validFrom}
+            {t('settings.activeVersion')}: {formatIsoDateForLocale(activeVersion.validFrom, locale)}
           </span>
         </div>
       </div>
@@ -226,6 +231,7 @@ export default function SettingsPage() {
             <input
               className="input"
               type="month"
+              lang={inputLocale}
               value={selectedValidFrom.yearMonth}
               onChange={(event) => setValue('validFrom', validFromFromParts(event.target.value, selectedValidFrom.half), { shouldDirty: true })}
             />
@@ -240,7 +246,7 @@ export default function SettingsPage() {
             <input type="hidden" {...register('validFrom')} />
           </div>
           <div className="muted" style={{ fontSize: 12 }}>
-            {t('settings.validFromHint')}
+            {t('settings.validFromHint')} {formatIsoDateForLocale(watchedValidFrom, locale)}
           </div>
 
           <div className="control-row">
@@ -327,7 +333,7 @@ export default function SettingsPage() {
                     key={item.validFrom}
                     style={item.validFrom === activeVersion.validFrom ? { background: '#fffbeb' } : undefined}
                   >
-                    <td>{item.validFrom}</td>
+                    <td>{formatIsoDateForLocale(item.validFrom, locale)}</td>
                     <td>{item.pricePerFatPct.toFixed(2)}</td>
                     <td>{item.taxPercentage.toFixed(2)}</td>
                     <td>{item.premiumPerLiter.toFixed(2)}</td>
