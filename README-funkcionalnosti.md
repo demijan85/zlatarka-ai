@@ -66,7 +66,9 @@ Masne jedinice:
 
 - za svakog proizvodjaca mogu da se unose i menjaju mm vrednosti
 - postoji popup za pregled i izmenu mm po proizvodjacu
+- datum u popup-u za mm unos bira se kroz datepicker, a prikazuje se u srpskom formatu `dan.mesec.godina`
 - ako proizvodjac jos nema mm unose za izabrani mesec, popup odmah otvara prvi red sa datumom pocetka izabranog perioda (`1.` ili `16.`)
+- kada se doda novo mm merenje, podrazumevana masna jedinica se preuzima iz poslednjeg unosa za tog proizvodjaca u otvorenom popup-u
 - postoji opcija `Uvezi mm`
 
 Uvoz mm:
