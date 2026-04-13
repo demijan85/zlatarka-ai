@@ -7,8 +7,9 @@ import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog } from '@/components/layout/confirm-dialog';
 import { useNavigationGuard } from '@/components/layout/navigation-guard';
-import { localeForLanguage } from '@/lib/i18n/locale';
+import { inputLocaleForLanguage, localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { formatIsoDateForLocale } from '@/lib/utils/date';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 import type { DailyEntry, DailyIntakeLock, Supplier } from '@/types/domain';
 
@@ -57,6 +58,10 @@ function toDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function defaultQualityDateForPeriod(year: number, month: number, period: Period): string {
+  return toDate(year, month, period === 'SECOND_HALF' ? 16 : 1);
+}
+
 function getDefaultPeriod(dayOfMonth: number): Period {
   return dayOfMonth <= 15 ? 'FIRST_HALF' : 'SECOND_HALF';
 }
@@ -96,6 +101,7 @@ export default function DailyEntryPage() {
   const { t, language } = useTranslation();
   const { setGuard, requestNavigation } = useNavigationGuard();
   const locale = localeForLanguage(language);
+  const inputLocale = inputLocaleForLanguage(language);
   const router = useRouter();
 
   const [year, setYear] = useState(now.getFullYear());
@@ -688,7 +694,11 @@ export default function DailyEntryPage() {
       .map((item) => ({ id: item.id, date: item.date, fat_pct: String(item.fat_pct ?? '') }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    setQualityRows(baseRows);
+    setQualityRows(
+      baseRows.length
+        ? baseRows
+        : [{ date: defaultQualityDateForPeriod(year, month, period), fat_pct: '3.8' }]
+    );
   }
 
   const qualityMutation = useMutation({
@@ -1204,6 +1214,7 @@ export default function DailyEntryPage() {
                   <input
                     className="input"
                     type="date"
+                    lang={inputLocale}
                     value={row.date}
                     disabled={editingDisabled}
                     onChange={(e) => {
@@ -1212,6 +1223,9 @@ export default function DailyEntryPage() {
                       setQualityRows(next);
                     }}
                   />
+                  <span className="muted" style={{ minWidth: 120, fontSize: 12 }}>
+                    {row.date ? formatIsoDateForLocale(row.date, locale) : ''}
+                  </span>
                   <input
                     className="input"
                     type="number"
@@ -1242,7 +1256,7 @@ export default function DailyEntryPage() {
                 onClick={() =>
                   setQualityRows((prev) => [
                     ...prev,
-                    { date: toDate(year, month, dayNumbers[0] ?? 1), fat_pct: '3.8' },
+                    { date: defaultQualityDateForPeriod(year, month, period), fat_pct: '3.8' },
                   ])
                 }
               >

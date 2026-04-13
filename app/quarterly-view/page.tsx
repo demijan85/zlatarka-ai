@@ -11,7 +11,7 @@ import {
 } from '@/lib/constants/calculation';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { getQuarterBounds } from '@/lib/utils/date';
+import { formatIsoDateLabelForLocale, getQuarterBounds } from '@/lib/utils/date';
 import { getQuarterlyExportFileName } from '@/lib/utils/export-file-names';
 import { periodStartDate } from '@/lib/utils/period';
 
@@ -124,7 +124,7 @@ export default function QuarterlyViewPage() {
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0 }}>{t('quarterly.title')}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
-          {t('quarterly.constantsUsed')}: <strong>{constantsLabel}</strong>
+          {t('quarterly.constantsUsed')}: <strong>{formatIsoDateLabelForLocale(constantsLabel, locale)}</strong>
         </div>
         {!snapshot?.isComplete && coveredThroughLabel ? (
           <div

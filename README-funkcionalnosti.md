@@ -66,6 +66,7 @@ Masne jedinice:
 
 - za svakog proizvodjaca mogu da se unose i menjaju mm vrednosti
 - postoji popup za pregled i izmenu mm po proizvodjacu
+- ako proizvodjac jos nema mm unose za izabrani mesec, popup odmah otvara prvi red sa datumom pocetka izabranog perioda (`1.` ili `16.`)
 - postoji opcija `Uvezi mm`
 
 Uvoz mm:
@@ -120,11 +121,13 @@ Glavne funkcionalnosti:
 - kada se promeni `cena sa PDV`, automatski se preracunaju `cena po kolicini` i `cena po mm`
 - override vrednosti se vizuelno isticu i imaju tooltip sa izracunatom i podesnom vrednoscu
 - koriscenje parametara obracuna koji vaze za konkretan mesec
+- datumi parametara i ostali istaknuti datumi u pregledima prikazuju se u srpskom formatu `dan.mesec.godina`
 - izvoz pregleda u XLSX
 - XLSX izvoz je pripremljen za stampu na A4 po sirini
 - nazivi eksportovanih fajlova prate izabrani jezik, a srpski naziv je u latinici
 - ako je izabran samo prvi ili drugi deo meseca, taj period ulazi i u naziv fajla
 - generisanje priznanica u PDF formatu
+- priznaniice koriste istu formulu kao mesecni pregled, ukljucujuci override za `cena sa PDV` i `stimulacija`
 - generisanje XML fajla za placanja
 - izbor samo odredjenih proizvodjaca za placanja i izvoz
 

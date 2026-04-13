@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants/calculation';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
+import { formatIsoDateLabelForLocale } from '@/lib/utils/date';
 import { getMonthlyExportFileName } from '@/lib/utils/export-file-names';
 import { periodStartDate } from '@/lib/utils/period';
 
@@ -250,7 +251,7 @@ export default function MonthlyViewPage() {
       <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0 }}>{t('monthly.title')}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
-          {t('monthly.constantsUsed')}: <strong>{constantsLabel}</strong>
+          {t('monthly.constantsUsed')}: <strong>{formatIsoDateLabelForLocale(constantsLabel, locale)}</strong>
         </div>
 
         <div className="control-row">

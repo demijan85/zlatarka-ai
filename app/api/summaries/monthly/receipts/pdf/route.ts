@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { calculateMonthlyReceiptAmounts } from '@/lib/exports/monthly-receipts';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import type { MonthlySummaryRow } from '@/types/domain';
 import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
@@ -142,15 +143,15 @@ function buildReceiptContent(row: MonthlySummaryRow, year: number, month: number
   const w = A4_WIDTH - PAGE_MARGIN * 2;
   const rightBlockX = x + Math.round(w * 0.57);
   const topY = A4_HEIGHT - PAGE_MARGIN - indexOnPage * (RECEIPT_HEIGHT + RECEIPT_GAP);
-
-  // Receipt calculation follows original print layout: milk + stimulation => base, then PDV on base.
-  const milkAmount = round2(row.qty * row.pricePerQty);
-  const stimulationPerLiter = round2(row.stimulation);
-  const stimulationAmount = round2(row.qty * stimulationPerLiter);
-  const baseAmount = round2(milkAmount + stimulationAmount);
-  const taxAmount = round2(baseAmount * (row.taxPercentage / 100));
-  const totalAmount = round2(baseAmount + taxAmount);
-  const pricePerLiterWithStimulation = round2(row.pricePerQty + stimulationPerLiter);
+  const {
+    milkAmount,
+    stimulationPerLiter,
+    stimulationAmount,
+    baseAmount,
+    taxAmount,
+    totalAmount,
+    pricePerLiterWithStimulation,
+  } = calculateMonthlyReceiptAmounts(row);
 
   const location = [row.city, row.street].filter(Boolean).join(', ');
   const fullName = clampText(`${row.firstName} ${row.lastName}`.trim(), 32);
