@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog } from '@/components/layout/confirm-dialog';
 import { useNavigationGuard } from '@/components/layout/navigation-guard';
-import { inputLocaleForLanguage, localeForLanguage } from '@/lib/i18n/locale';
+import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { formatIsoDateForLocale } from '@/lib/utils/date';
+import { formatIsoDateForSerbianInput, parseSerbianDateInput } from '@/lib/utils/date';
 import { yearMonthFrom } from '@/lib/utils/year-month';
 import type { DailyEntry, DailyIntakeLock, Supplier } from '@/types/domain';
 
@@ -18,6 +18,7 @@ type Period = 'FIRST_HALF' | 'SECOND_HALF' | 'FULL';
 type QualityDraftRow = {
   id?: number;
   date: string;
+  dateInput: string;
   fat_pct: string;
 };
 
@@ -101,7 +102,6 @@ export default function DailyEntryPage() {
   const { t, language } = useTranslation();
   const { setGuard, requestNavigation } = useNavigationGuard();
   const locale = localeForLanguage(language);
-  const inputLocale = inputLocaleForLanguage(language);
   const router = useRouter();
 
   const [year, setYear] = useState(now.getFullYear());
@@ -691,13 +691,24 @@ export default function DailyEntryPage() {
 
     const baseRows = entries
       .filter((item) => item.supplier_id === supplier.id && item.fat_pct !== null)
-      .map((item) => ({ id: item.id, date: item.date, fat_pct: String(item.fat_pct ?? '') }))
+      .map((item) => ({
+        id: item.id,
+        date: item.date,
+        dateInput: formatIsoDateForSerbianInput(item.date),
+        fat_pct: String(item.fat_pct ?? ''),
+      }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     setQualityRows(
       baseRows.length
         ? baseRows
-        : [{ date: defaultQualityDateForPeriod(year, month, period), fat_pct: '3.8' }]
+        : [
+            {
+              date: defaultQualityDateForPeriod(year, month, period),
+              dateInput: formatIsoDateForSerbianInput(defaultQualityDateForPeriod(year, month, period)),
+              fat_pct: '3.8',
+            },
+          ]
     );
   }
 
@@ -1213,19 +1224,22 @@ export default function DailyEntryPage() {
                 <div className="control-row" key={`${row.id ?? 'new'}-${index}`}>
                   <input
                     className="input"
-                    type="date"
-                    lang={inputLocale}
-                    value={row.date}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="d.m.gggg."
+                    value={row.dateInput}
                     disabled={editingDisabled}
                     onChange={(e) => {
                       const next = [...qualityRows];
-                      next[index] = { ...next[index], date: e.target.value };
+                      const dateInput = e.target.value;
+                      next[index] = {
+                        ...next[index],
+                        dateInput,
+                        date: parseSerbianDateInput(dateInput) ?? '',
+                      };
                       setQualityRows(next);
                     }}
                   />
-                  <span className="muted" style={{ minWidth: 120, fontSize: 12 }}>
-                    {row.date ? formatIsoDateForLocale(row.date, locale) : ''}
-                  </span>
                   <input
                     className="input"
                     type="number"
@@ -1256,7 +1270,11 @@ export default function DailyEntryPage() {
                 onClick={() =>
                   setQualityRows((prev) => [
                     ...prev,
-                    { date: defaultQualityDateForPeriod(year, month, period), fat_pct: '3.8' },
+                    {
+                      date: defaultQualityDateForPeriod(year, month, period),
+                      dateInput: formatIsoDateForSerbianInput(defaultQualityDateForPeriod(year, month, period)),
+                      fat_pct: '3.8',
+                    },
                   ])
                 }
               >
