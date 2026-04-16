@@ -14,7 +14,12 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { formatIsoDateLabelForLocale } from '@/lib/utils/date';
 import { getMonthlyExportFileName } from '@/lib/utils/export-file-names';
-import { buildPriceWithTaxHeaderLabel, buildPriceWithTaxRateSuffix } from '@/lib/utils/price-display';
+import {
+  buildPriceWithTaxHeaderLabel,
+  buildPriceWithTaxRateSuffix,
+  calculateDisplayedTotalPricePerLiter,
+  calculateDisplayedTotalPricePerLiterFromComponents,
+} from '@/lib/utils/price-display';
 import { periodStartDate } from '@/lib/utils/period';
 
 type Period = 'first' | 'second' | 'all';
@@ -207,6 +212,19 @@ export default function MonthlyViewPage() {
 
   function buildOverrideTooltip(label: string, calculatedValue: number, effectiveValue: number): string {
     return `${label}: ${t('monthly.overrideCalculated')} ${calculatedValue.toFixed(2)} | ${t('monthly.overrideSet')} ${effectiveValue.toFixed(2)}`;
+  }
+
+  function displayedPricePerLiter(row: MonthlySummaryRow): number {
+    return calculateDisplayedTotalPricePerLiter(row.totalAmount, row.qty);
+  }
+
+  function calculatedDisplayedPricePerLiter(row: MonthlySummaryRow): number {
+    return calculateDisplayedTotalPricePerLiterFromComponents(
+      row.calculatedPriceWithTax,
+      row.calculatedStimulation,
+      row.taxPercentage,
+      selectedMonthStart
+    );
   }
 
   function selectFieldContent(event: FocusEvent<HTMLInputElement> | MouseEvent<HTMLInputElement>) {
@@ -483,12 +501,12 @@ export default function MonthlyViewPage() {
                   </td>
                   <td
                     style={alignRight}
-                    className={row.priceWithTaxOverride !== null ? 'monthly-override-cell' : undefined}
+                    className={row.priceWithTaxOverride !== null || row.stimulationOverride !== null ? 'monthly-override-cell' : undefined}
                   >
-                    {row.priceWithTax.toFixed(2)}
-                    {row.priceWithTaxOverride !== null ? (
+                    {displayedPricePerLiter(row).toFixed(2)}
+                    {row.priceWithTaxOverride !== null || row.stimulationOverride !== null ? (
                       <div className="supplier-row-tooltip monthly-override-tooltip">
-                        {buildOverrideTooltip(priceWithTaxLabel, row.calculatedPriceWithTax, row.priceWithTax)}
+                        {buildOverrideTooltip(priceWithTaxLabel, calculatedDisplayedPricePerLiter(row), displayedPricePerLiter(row))}
                       </div>
                     ) : null}
                   </td>
@@ -539,7 +557,7 @@ export default function MonthlyViewPage() {
 
               <div className="supplier-form-grid supplier-form-grid-2">
                 <label className="module-field">
-                  <span className="field-label">{priceWithTaxLabel}</span>
+                  <span className="field-label">{t('monthly.milkPriceTax')}</span>
                   <input
                     className="input"
                     type="text"
