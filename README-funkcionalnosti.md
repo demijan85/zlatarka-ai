@@ -119,6 +119,7 @@ Glavne funkcionalnosti:
 - filteri po godini, mesecu, periodu i gradu
 - prikaz agregiranih podataka po proizvodjacu
 - kolone sa cenama u mesecnom pregledu i XLSX izvozu prate sled `cena/mm -> cena/kolicina -> stimulacija -> ukupna cena sa PDV`
+- kolona `ukupna cena sa PDV` u mesecnom pregledu i XLSX izvozu prikazuje stvarnu ukupnu cenu po litru koja odgovara iznosu `Ukupno / kolicina`, ukljucujuci i stimulaciju po pravilima vazecim za izabrani mesec
 - zasebna kolona `PDV` se ne prikazuje u mesecnom pregledu i XLSX izvozu, vec se poreska stopa prikazuje jednom u zaglavlju kolone `ukupna cena sa PDV`, rasporedjeno u dva reda (`Ukupna cena` / `sa PDV (8%)`) radi uze kolone
 - proizvodjaci sa kolicinom `0` se ne prikazuju u tabeli niti ulaze u mesecne izvoze
 - mogucnost rucnog override-a za `cena sa PDV` i `stimulacija` po proizvodjacu, mesecu i izabranom periodu

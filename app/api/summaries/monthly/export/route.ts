@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { TAX_ON_STIMULATION_VALID_FROM } from '@/lib/calculations/formulas';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
-import { buildPriceWithTaxMultilineLabel } from '@/lib/utils/price-display';
+import { buildPriceWithTaxMultilineLabel, calculateDisplayedTotalPricePerLiter } from '@/lib/utils/price-display';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
 
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
         row.pricePerFatPct,
         row.pricePerQty,
         row.stimulation,
-        row.priceWithTax,
+        calculateDisplayedTotalPricePerLiter(row.totalAmount, row.qty),
         row.totalAmount,
       ]);
       dataRow.getCell(4).numFmt = '0';
