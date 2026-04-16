@@ -41,7 +41,7 @@ test('monthly receipt amounts match monthly summary formula', () => {
   assert.equal(result.pricePerLiterWithStimulation, 46.36);
 });
 
-test('monthly receipt tax excludes stimulation overrides', () => {
+test('monthly receipt tax follows legacy override formula before April 2026', () => {
   const result = calculateMonthlyReceiptAmounts({
     ...baseRow,
     priceWithTax: 54,
@@ -55,4 +55,18 @@ test('monthly receipt tax excludes stimulation overrides', () => {
   assert.equal(result.baseAmount, 45000);
   assert.equal(result.totalAmount, 57000);
   assert.equal(result.pricePerLiterWithStimulation, 57);
+});
+
+test('monthly receipt tax includes stimulation from April 2026 onward', () => {
+  const result = calculateMonthlyReceiptAmounts({
+    ...baseRow,
+    totalAmount: 46440,
+  });
+
+  assert.equal(result.milkAmount, 42000);
+  assert.equal(result.stimulationAmount, 1000);
+  assert.equal(result.baseAmount, 43000);
+  assert.equal(result.taxAmount, 3440);
+  assert.equal(result.totalAmount, 46440);
+  assert.equal(result.pricePerLiterWithStimulation, 46.44);
 });

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
+import { TAX_ON_STIMULATION_VALID_FROM } from '@/lib/calculations/formulas';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import { getMonthlyExportFileName, normalizeExportLanguage } from '@/lib/utils/export-file-names';
+import { buildPriceWithTaxMultilineLabel } from '@/lib/utils/price-display';
 import { parseMonth, parseYear } from '@/lib/utils/date';
 import { normalizePeriod } from '@/lib/utils/period';
 
@@ -17,6 +19,13 @@ export async function GET(request: Request) {
 
     const summaries = (await getMonthlySummaries({ year, month, city, period })).filter(
       (row) => Number.isFinite(row.qty) && row.qty > 0
+    );
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const isLegacyPricingMonth = monthStart < TAX_ON_STIMULATION_VALID_FROM;
+    const priceWithTaxHeader = buildPriceWithTaxMultilineLabel(
+      language === 'en' ? 'Total price' : 'Ukupna cena',
+      language === 'en' ? 'incl. tax' : 'sa PDV',
+      summaries.map((row) => row.taxPercentage)
     );
 
     const workbook = new ExcelJS.Workbook();
@@ -37,9 +46,17 @@ export async function GET(request: Request) {
       },
       horizontalCentered: true,
       verticalCentered: false,
-      printTitlesRow: '1:1',
+      printTitlesRow: isLegacyPricingMonth ? '2:2' : '1:1',
     };
-    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    worksheet.views = [{ state: 'frozen', ySplit: isLegacyPricingMonth ? 2 : 1 }];
+
+    if (isLegacyPricingMonth) {
+      const noteRow = worksheet.addRow([
+        'Napomena: do 31.03.2026. stimulacija je obracunavana van PDV osnovice.',
+      ]);
+      worksheet.mergeCells('A1:J1');
+      noteRow.font = { italic: true, size: 10 };
+    }
 
     const headerRow = worksheet.addRow([
       'RB',
@@ -49,12 +66,12 @@ export async function GET(request: Request) {
       'mm',
       'Cena mm',
       'Cena kolicina',
-      'PDV %',
-      'Cena sa PDV',
       'Stimulacija',
+      priceWithTaxHeader,
       'Ukupno',
     ]);
     headerRow.font = { bold: true };
+    headerRow.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
 
     for (const row of summaries) {
       const dataRow = worksheet.addRow([
@@ -65,9 +82,8 @@ export async function GET(request: Request) {
         row.fatPct,
         row.pricePerFatPct,
         row.pricePerQty,
-        row.taxPercentage,
-        row.priceWithTax,
         row.stimulation,
+        row.priceWithTax,
         row.totalAmount,
       ]);
       dataRow.getCell(4).numFmt = '0';
@@ -77,15 +93,14 @@ export async function GET(request: Request) {
       dataRow.getCell(8).numFmt = '0.00';
       dataRow.getCell(9).numFmt = '0.00';
       dataRow.getCell(10).numFmt = '0.00';
-      dataRow.getCell(11).numFmt = '0.00';
     }
 
     const totalQty = summaries.reduce((sum, item) => sum + item.qty, 0);
     const totalAmount = summaries.reduce((sum, item) => sum + item.totalAmount, 0);
-    const totalRow = worksheet.addRow(['', '', 'TOTAL', totalQty, '', '', '', '', '', '', totalAmount]);
+    const totalRow = worksheet.addRow(['', '', 'TOTAL', totalQty, '', '', '', '', '', totalAmount]);
     totalRow.font = { bold: true };
     totalRow.getCell(4).numFmt = '0';
-    totalRow.getCell(11).numFmt = '0.00';
+    totalRow.getCell(10).numFmt = '0.00';
 
     worksheet.columns = [
       { width: 5 },
@@ -95,7 +110,6 @@ export async function GET(request: Request) {
       { width: 8 },
       { width: 9 },
       { width: 11 },
-      { width: 8 },
       { width: 11 },
       { width: 10 },
       { width: 12 },

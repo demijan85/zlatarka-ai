@@ -118,18 +118,24 @@ Glavne funkcionalnosti:
 
 - filteri po godini, mesecu, periodu i gradu
 - prikaz agregiranih podataka po proizvodjacu
+- kolone sa cenama u mesecnom pregledu i XLSX izvozu prate sled `cena/mm -> cena/kolicina -> stimulacija -> ukupna cena sa PDV`
+- zasebna kolona `PDV` se ne prikazuje u mesecnom pregledu i XLSX izvozu, vec se poreska stopa prikazuje jednom u zaglavlju kolone `ukupna cena sa PDV`, rasporedjeno u dva reda (`Ukupna cena` / `sa PDV (8%)`) radi uze kolone
 - proizvodjaci sa kolicinom `0` se ne prikazuju u tabeli niti ulaze u mesecne izvoze
 - mogucnost rucnog override-a za `cena sa PDV` i `stimulacija` po proizvodjacu, mesecu i izabranom periodu
 - kada se promeni `cena sa PDV`, automatski se preracunaju `cena po kolicini` i `cena po mm`
 - override vrednosti se vizuelno isticu i imaju tooltip sa izracunatom i podesnom vrednoscu
 - koriscenje parametara obracuna koji vaze za konkretan mesec
+- za mesece do ukljucno marta 2026. zadrzava se istorijska racunica u kojoj je stimulacija bila van PDV osnovice
+- za mesece od aprila 2026. ukupna cena se racuna tako sto se na zbir `cena + stimulacija` primenjuje PDV
 - datumi parametara i ostali istaknuti datumi u pregledima prikazuju se u srpskom formatu `dan.mesec.godina`
 - izvoz pregleda u XLSX
 - XLSX izvoz je pripremljen za stampu na A4 po sirini
+- za istorijske mesece XLSX izvoz prikazuje napomenu da je stimulacija obracunavana van PDV osnovice
 - nazivi eksportovanih fajlova prate izabrani jezik, a srpski naziv je u latinici
 - ako je izabran samo prvi ili drugi deo meseca, taj period ulazi i u naziv fajla
 - generisanje priznanica u PDF formatu
 - priznaniice koriste istu formulu kao mesecni pregled, ukljucujuci override za `cena sa PDV` i `stimulacija`
+- PDF priznaniice za istorijske mesece sadrze sitnu napomenu da je stimulacija obracunavana van PDV osnovice
 - generisanje XML fajla za placanja
 - izbor samo odredjenih proizvodjaca za placanja i izvoz
 

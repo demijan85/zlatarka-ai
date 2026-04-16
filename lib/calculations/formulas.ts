@@ -1,8 +1,14 @@
 import type { CalculationConstants } from '../constants/calculation';
 
+export const TAX_ON_STIMULATION_VALID_FROM = '2026-04-01';
+
 export function average(values: number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function usesTaxOnStimulation(effectiveDate: string): boolean {
+  return effectiveDate >= TAX_ON_STIMULATION_VALID_FROM;
 }
 
 export function stimulationPerLiter(qty: number, constants: CalculationConstants): number {
@@ -22,7 +28,8 @@ export function priceWithTaxPerLiter(pricePerLiter: number, constants: Calculati
 export function monthlyTotalAmount(
   qty: number,
   fatPct: number,
-  constants: CalculationConstants
+  constants: CalculationConstants,
+  effectiveDate: string
 ): {
   pricePerQty: number;
   priceWithTax: number;
@@ -32,7 +39,9 @@ export function monthlyTotalAmount(
   const pricePerQty = pricePerLiterByFat(fatPct, constants);
   const priceWithTax = priceWithTaxPerLiter(pricePerQty, constants);
   const stimulation = stimulationPerLiter(qty, constants);
-  const totalAmount = qty * (priceWithTax + stimulation);
+  const totalAmount = usesTaxOnStimulation(effectiveDate)
+    ? qty * (priceWithTax + stimulation * (1 + constants.taxPercentage / 100))
+    : qty * (priceWithTax + stimulation);
 
   return {
     pricePerQty,
@@ -52,6 +61,7 @@ export function applyMonthlySummaryOverrides(
     stimulation: number;
   },
   taxPercentage: number,
+  effectiveDate: string,
   overrides: {
     priceWithTaxOverride?: number | null;
     stimulationOverride?: number | null;
@@ -67,7 +77,9 @@ export function applyMonthlySummaryOverrides(
   const pricePerQty = priceWithTax / (1 + taxPercentage / 100);
   const pricePerFatPct = fatPct > 0 ? pricePerQty / fatPct : base.pricePerFatPct;
   const stimulation = overrides.stimulationOverride ?? base.stimulation;
-  const totalAmount = qty * (priceWithTax + stimulation);
+  const totalAmount = usesTaxOnStimulation(effectiveDate)
+    ? qty * (priceWithTax + stimulation * (1 + taxPercentage / 100))
+    : qty * (priceWithTax + stimulation);
 
   return {
     pricePerFatPct,

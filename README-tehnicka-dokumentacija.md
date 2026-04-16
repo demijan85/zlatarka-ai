@@ -232,7 +232,10 @@ Mesecni i kvartalni pregledi:
 - kvartalni pregled koristi snapshot payload sa `rows`, `coveredThroughDate`, `expectedEndDate` i `isComplete`
 - kada poslednji dnevni unos ne pokriva kraj kvartala, UI prikazuje upozorenje, a XLSX export dodaje datum pokrivenosti u ime fajla i zaglavlje dokumenta
 - `lib/repositories/summaries.ts` paginira citanje `daily_entries` u batch-evima od 1000 redova da mesecni i kvartalni pregledi ne ostanu odseceni kada Supabase vrati samo prvi page
-- PDF priznaniice koriste helper `lib/exports/monthly-receipts.ts` da prate istu racunicu kao `MonthlySummaryRow.totalAmount`: PDV se racuna samo na cenu mleka, dok je stimulacija van PDV osnovice
+- `lib/calculations/formulas.ts` od `2026-04-01` racuna PDV i na stimulaciju, dok za ranije datume zadrzava istorijsku racunicu sa stimulacijom van PDV osnovice
+- `lib/repositories/summaries.ts` i `lib/repositories/supplier-history.ts` prosledjuju datum unosa u formula sloj da bi se ispravna racunica primenila po periodu bez menjanja istorijskih isplata
+- PDF priznaniice koriste helper `lib/exports/monthly-receipts.ts` da prate istu racunicu kao `MonthlySummaryRow.totalAmount`, a osnovicu i PDV izvode iz vec izracunatog ukupnog iznosa tako da se isti PDF korektno renderuje i za stare i za nove mesece
+- istorijski meseci dobijaju diskretnu napomenu o staroj PDV logici u `app/monthly-view/page.tsx`, `app/api/summaries/monthly/export/route.ts` i `app/api/summaries/monthly/receipts/pdf/route.ts`
 - `lib/utils/date.ts` ima helper-e za formatiranje ISO datuma u lokalizovani prikaz, a `lib/i18n/locale.ts` odvaja UI locale od locale-a za nativne date/month inpute
 - popup za unos mm zadrzava nativni `type=\"date\"` picker, ali prikaz izabranog datuma renderuje kroz lokalizovani srpski format preko zasebnog prikaznog sloja
 

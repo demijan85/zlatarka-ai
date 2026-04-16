@@ -9,10 +9,12 @@ import {
   sortVersions,
   type VersionedCalculationConstants,
 } from '@/lib/constants/calculation';
+import { TAX_ON_STIMULATION_VALID_FROM } from '@/lib/calculations/formulas';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { formatIsoDateLabelForLocale } from '@/lib/utils/date';
 import { getMonthlyExportFileName } from '@/lib/utils/export-file-names';
+import { buildPriceWithTaxHeaderLabel, buildPriceWithTaxRateSuffix } from '@/lib/utils/price-display';
 import { periodStartDate } from '@/lib/utils/period';
 
 type Period = 'first' | 'second' | 'all';
@@ -105,6 +107,7 @@ export default function MonthlyViewPage() {
     exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
 
   const currentYearMonth = useMemo(() => `${year}-${String(month).padStart(2, '0')}`, [year, month]);
+  const selectedMonthStart = useMemo(() => `${currentYearMonth}-01`, [currentYearMonth]);
   const firstHalfDate = useMemo(() => periodStartDate(year, month, 'first'), [year, month]);
   const secondHalfDate = useMemo(() => periodStartDate(year, month, 'second'), [year, month]);
   const overrideTarget = useMemo(
@@ -124,6 +127,15 @@ export default function MonthlyViewPage() {
     if (firstHalfVersion.validFrom === secondHalfVersion.validFrom) return firstHalfVersion.validFrom;
     return `${firstHalfVersion.validFrom} / ${secondHalfVersion.validFrom}`;
   }, [firstHalfDate, orderedVersions, period, secondHalfDate]);
+  const pricingNote = selectedMonthStart < TAX_ON_STIMULATION_VALID_FROM ? t('monthly.legacyTaxNote') : '';
+  const priceWithTaxLabel = useMemo(
+    () => buildPriceWithTaxHeaderLabel(t('monthly.priceTax'), visibleRows.map((row) => row.taxPercentage)),
+    [t, visibleRows]
+  );
+  const priceWithTaxSuffix = useMemo(
+    () => buildPriceWithTaxRateSuffix(visibleRows.map((row) => row.taxPercentage)),
+    [visibleRows]
+  );
 
   const overrideMutation = useMutation({
     mutationFn: async (payload: { supplierId: number; priceWithTaxOverride: number | null; stimulationOverride: number | null }) => {
@@ -253,6 +265,11 @@ export default function MonthlyViewPage() {
         <div className="muted" style={{ fontSize: 12 }}>
           {t('monthly.constantsUsed')}: <strong>{formatIsoDateLabelForLocale(constantsLabel, locale)}</strong>
         </div>
+        {pricingNote ? (
+          <div className="muted" style={{ fontSize: 11 }}>
+            {pricingNote}
+          </div>
+        ) : null}
 
         <div className="control-row">
           <select className="input" value={year} onChange={(e) => setYear(Number(e.target.value))}>
@@ -394,9 +411,16 @@ export default function MonthlyViewPage() {
               <th style={alignCenter}>{t('monthly.mm')}</th>
               <th style={alignRight}>{t('monthly.priceMm')}</th>
               <th style={alignRight}>{t('monthly.priceQty')}</th>
-              <th style={alignCenter}>{t('monthly.tax')}</th>
-              <th style={alignRight}>{t('monthly.priceTax')}</th>
-              <th style={alignCenter}>{t('monthly.stimulation')}</th>
+              <th style={alignRight}>{t('monthly.stimulation')}</th>
+              <th style={alignRight}>
+                <span style={{ display: 'inline-grid', lineHeight: 1.15, textAlign: 'right' }}>
+                  <span>{t('monthly.priceTaxLine1')}</span>
+                  <span>
+                    {t('monthly.priceTaxLine2')}
+                    {priceWithTaxSuffix ? ` ${priceWithTaxSuffix}` : ''}
+                  </span>
+                </span>
+              </th>
               <th style={alignRight}>{t('monthly.totalAmount')}</th>
               <th style={alignCenter}>{t('monthly.overrideAction')}</th>
             </tr>
@@ -404,17 +428,17 @@ export default function MonthlyViewPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={12}>{t('common.loading')}</td>
+                <td colSpan={11}>{t('common.loading')}</td>
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan={12} style={{ color: 'var(--danger)' }}>
+                <td colSpan={11} style={{ color: 'var(--danger)' }}>
                   {(error as Error).message}
                 </td>
               </tr>
             ) : visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={12}>{t('monthly.noData')}</td>
+                <td colSpan={11}>{t('monthly.noData')}</td>
               </tr>
             ) : (
               visibleRows.map((row) => (
@@ -446,7 +470,17 @@ export default function MonthlyViewPage() {
                       </div>
                     ) : null}
                   </td>
-                  <td style={alignCenter}>{row.taxPercentage.toFixed(2)}</td>
+                  <td
+                    style={alignRight}
+                    className={row.stimulationOverride !== null ? 'monthly-override-cell' : undefined}
+                  >
+                    {row.stimulation.toFixed(2)}
+                    {row.stimulationOverride !== null ? (
+                      <div className="supplier-row-tooltip monthly-override-tooltip">
+                        {buildOverrideTooltip(t('monthly.stimulation'), row.calculatedStimulation, row.stimulation)}
+                      </div>
+                    ) : null}
+                  </td>
                   <td
                     style={alignRight}
                     className={row.priceWithTaxOverride !== null ? 'monthly-override-cell' : undefined}
@@ -454,18 +488,7 @@ export default function MonthlyViewPage() {
                     {row.priceWithTax.toFixed(2)}
                     {row.priceWithTaxOverride !== null ? (
                       <div className="supplier-row-tooltip monthly-override-tooltip">
-                        {buildOverrideTooltip(t('monthly.priceTax'), row.calculatedPriceWithTax, row.priceWithTax)}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td
-                    style={alignCenter}
-                    className={row.stimulationOverride !== null ? 'monthly-override-cell' : undefined}
-                  >
-                    {row.stimulation.toFixed(2)}
-                    {row.stimulationOverride !== null ? (
-                      <div className="supplier-row-tooltip monthly-override-tooltip">
-                        {buildOverrideTooltip(t('monthly.stimulation'), row.calculatedStimulation, row.stimulation)}
+                        {buildOverrideTooltip(priceWithTaxLabel, row.calculatedPriceWithTax, row.priceWithTax)}
                       </div>
                     ) : null}
                   </td>
@@ -482,7 +505,7 @@ export default function MonthlyViewPage() {
               <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                 <td colSpan={3}>{t('table.totals')}</td>
                 <td style={alignRight}>{totalQty.toFixed(0)}</td>
-                <td colSpan={6} />
+                <td colSpan={5} />
                 <td style={alignRight}>{totalAmount.toFixed(2)}</td>
                 <td />
               </tr>
@@ -516,7 +539,7 @@ export default function MonthlyViewPage() {
 
               <div className="supplier-form-grid supplier-form-grid-2">
                 <label className="module-field">
-                  <span className="field-label">{t('monthly.priceTax')}</span>
+                  <span className="field-label">{priceWithTaxLabel}</span>
                   <input
                     className="input"
                     type="text"
