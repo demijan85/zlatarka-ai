@@ -18,10 +18,10 @@ export function calculateMonthlyReceiptAmounts(row: MonthlySummaryRow): MonthlyR
   const milkAmount = round2(row.qty * row.pricePerQty);
   const stimulationPerLiter = round2(row.stimulation);
   const stimulationAmount = round2(row.qty * stimulationPerLiter);
-  const taxAmount = round2(row.qty * (row.priceWithTax - row.pricePerQty));
   const totalAmount = round2(row.totalAmount);
-  const baseAmount = round2(totalAmount - taxAmount);
-  const pricePerLiterWithStimulation = round2(row.priceWithTax + row.stimulation);
+  const baseAmount = round2(milkAmount + stimulationAmount);
+  const taxAmount = round2(totalAmount - baseAmount);
+  const pricePerLiterWithStimulation = row.qty > 0 ? round2(totalAmount / row.qty) : 0;
 
   return {
     milkAmount,

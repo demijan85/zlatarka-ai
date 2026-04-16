@@ -66,7 +66,7 @@ function summarizeEntriesWithVersions(
       .filter((value): value is number => value !== null && value !== undefined);
     const groupFatPct = average(groupFatValues);
     const constants = toCalculationConstants(group.version);
-    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants);
+    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants, group.entries[0]?.date ?? group.version.validFrom);
 
     milkNetAmount += groupQty * totals.pricePerQty;
     milkGrossAmount += groupQty * totals.priceWithTax;
@@ -103,6 +103,7 @@ function calculateMonthlyRow(
   }
 ): MonthlySummaryRow {
   const calculated = summarizeEntriesWithVersions(entries, versions);
+  const effectiveDate = entries[0]?.date ?? '0000-01-01';
   const { pricePerFatPct, pricePerQty, priceWithTax, stimulation, totalAmount } = applyMonthlySummaryOverrides(
     calculated.qty,
     calculated.fatPct,
@@ -113,6 +114,7 @@ function calculateMonthlyRow(
       stimulation: calculated.stimulation,
     },
     calculated.taxPercentage,
+    effectiveDate,
     {
       priceWithTaxOverride: overrides?.priceWithTaxOverride ?? null,
       stimulationOverride: overrides?.stimulationOverride ?? null,

@@ -51,7 +51,7 @@ function summarizeMonthEntries(
       .filter((value): value is number => value !== null && value !== undefined);
     const groupFatPct = average(groupFatValues);
     const constants = toCalculationConstants(group.version);
-    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants);
+    const totals = monthlyTotalAmount(groupQty, groupFatPct, constants, group.entries[0]?.date ?? group.version.validFrom);
 
     milkNetAmount += groupQty * totals.pricePerQty;
     milkGrossAmount += groupQty * totals.priceWithTax;
