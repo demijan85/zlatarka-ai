@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { TAX_ON_STIMULATION_VALID_FROM } from '@/lib/calculations/formulas';
 import { calculateMonthlyReceiptAmounts } from '@/lib/exports/monthly-receipts';
 import { getMonthlySummaries } from '@/lib/repositories/summaries';
 import type { MonthlySummaryRow } from '@/types/domain';
@@ -156,6 +157,7 @@ function buildReceiptContent(row: MonthlySummaryRow, year: number, month: number
   const location = [row.city, row.street].filter(Boolean).join(', ');
   const fullName = clampText(`${row.firstName} ${row.lastName}`.trim(), 32);
   const printableLocation = clampText(location || '-', 30);
+  const isLegacyPricingMonth = `${year}-${String(month).padStart(2, '0')}-01` < TAX_ON_STIMULATION_VALID_FROM;
 
   let c = '0.45 w\n';
 
@@ -169,6 +171,9 @@ function buildReceiptContent(row: MonthlySummaryRow, year: number, month: number
   c += textCmd(`JMBG: ${row.jmbg ?? ''}`, rightBlockX, topY - 62, 10, true);
 
   c += centerTextCmd(`OBRACUN MLEKA ZA PERIOD ${year}/${String(month).padStart(2, '0')}`, x + w / 2, topY - 94, 14.5, true);
+  if (isLegacyPricingMonth) {
+    c += centerTextCmd('Napomena: stimulacija je obracunavana van PDV osnovice.', x + w / 2, topY - 108, 7.5);
+  }
 
   const qtyRowY = topY - 126;
   const qtyRowH = 24;
