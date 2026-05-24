@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Building2, FileCode2, FileText } from 'lucide-react';
 import type { QuarterlySummarySnapshot } from '@/types/domain';
 import {
   defaultVersionedConstants,
@@ -12,7 +13,7 @@ import {
 import { localeForLanguage } from '@/lib/i18n/locale';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { formatIsoDateLabelForLocale, getQuarterBounds } from '@/lib/utils/date';
-import { getQuarterlyExportFileName } from '@/lib/utils/export-file-names';
+import { getQuarterlyExportFileName, getQuarterlyPaymentExportFileName } from '@/lib/utils/export-file-names';
 import { periodStartDate } from '@/lib/utils/period';
 
 async function parseError(response: Response, fallback: string): Promise<Error> {
@@ -47,6 +48,8 @@ export default function QuarterlyViewPage() {
   const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
   const [year, setYear] = useState(now.getFullYear());
   const [quarter, setQuarter] = useState(currentQuarter);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
+  const [showExportSelection, setShowExportSelection] = useState(false);
 
   const { data: snapshot, isLoading, error } = useQuery({
     queryKey: ['quarterly', year, quarter],
@@ -61,6 +64,12 @@ export default function QuarterlyViewPage() {
 
   const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
   const totalPremium = rows.reduce((sum, row) => sum + row.totalPremium, 0);
+  const exportableRows = useMemo(
+    () => rows.filter((row) => Number.isFinite(row.totalPremium) && row.totalPremium > 0 && Boolean(row.bankAccount?.trim())),
+    [rows]
+  );
+  const allExportableSelected =
+    exportableRows.length > 0 && exportableRows.every((row) => selectedSupplierIds.includes(row.supplierId));
   const alignCenter = { textAlign: 'center' as const };
   const alignRight = { textAlign: 'right' as const };
   const locale = localeForLanguage(language);
@@ -92,6 +101,21 @@ export default function QuarterlyViewPage() {
     return new Date(`${snapshot.coveredThroughDate}T00:00:00`).toLocaleDateString(locale);
   }, [locale, snapshot?.coveredThroughDate]);
 
+  useEffect(() => {
+    setSelectedSupplierIds((current) => {
+      const exportableIds = exportableRows.map((row) => row.supplierId);
+      const exportableSet = new Set(exportableIds);
+      const preserved = current.filter((id) => exportableSet.has(id));
+      const next = preserved.length ? preserved : exportableIds;
+
+      if (current.length === next.length && current.every((id, index) => id === next[index])) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [exportableRows]);
+
   function exportXlsx() {
     const params = new URLSearchParams({
       year: String(year),
@@ -111,6 +135,39 @@ export default function QuarterlyViewPage() {
           snapshot?.coveredThroughDate ?? null,
           snapshot?.expectedEndDate ?? expectedEndDate
         );
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch((exportError) => alert((exportError as Error).message));
+  }
+
+  function openPaymentExport(path: string, fileName: string) {
+    const exportIds = exportableRows
+      .filter((row) => selectedSupplierIds.includes(row.supplierId))
+      .map((row) => row.supplierId);
+
+    if (exportIds.length === 0) {
+      alert(t('quarterly.noSelectedPayments'));
+      return;
+    }
+
+    const params = new URLSearchParams({
+      year: String(year),
+      quarter: String(quarter),
+      lang: language,
+    });
+    exportIds.forEach((id) => params.append('supplierId', String(id)));
+
+    fetch(`${path}?${params.toString()}`)
+      .then(async (response) => {
+        if (!response.ok) throw await parseError(response, 'Export failed');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -161,6 +218,119 @@ export default function QuarterlyViewPage() {
           <button className="btn" onClick={exportXlsx}>
             {t('quarterly.export')}
           </button>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 6px',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'var(--surface-muted)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span
+              className="muted"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}
+            >
+              <Building2 size={14} />
+              {t('quarterly.exportPaymentsBanks')}
+            </span>
+            <button
+              className="btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() =>
+                openPaymentExport(
+                  '/api/summaries/quarterly/payments',
+                  getQuarterlyPaymentExportFileName('payments', year, quarter, language)
+                )
+              }
+            >
+              <FileCode2 size={14} />
+              {t('quarterly.exportPaymentsOtp')}
+            </button>
+            <button
+              className="btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() =>
+                openPaymentExport(
+                  '/api/summaries/quarterly/payments/komercijalna',
+                  getQuarterlyPaymentExportFileName('payments-komercijalna', year, quarter, language)
+                )
+              }
+            >
+              <FileText size={14} />
+              {t('quarterly.exportPaymentsKomercijalna')}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button className="btn" type="button" onClick={() => setShowExportSelection((value) => !value)}>
+            {showExportSelection ? t('quarterly.hideExportSelection') : t('quarterly.showExportSelection')}
+          </button>
+
+          {showExportSelection ? (
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: 10,
+                display: 'grid',
+                gap: 8,
+                maxHeight: 260,
+                overflow: 'auto',
+              }}
+            >
+              <div className="muted" style={{ fontSize: 12 }}>
+                {t('quarterly.exportSelectionHint')}
+              </div>
+
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={allExportableSelected}
+                  onChange={(e) =>
+                    setSelectedSupplierIds(e.target.checked ? exportableRows.map((row) => row.supplierId) : [])
+                  }
+                />
+                <span>{t('quarterly.selectAllExportable')}</span>
+              </label>
+
+              {exportableRows.length === 0 ? (
+                <div className="muted">{t('quarterly.noExportableSuppliers')}</div>
+              ) : (
+                exportableRows.map((row) => {
+                  const checked = selectedSupplierIds.includes(row.supplierId);
+                  return (
+                    <label
+                      key={row.supplierId}
+                      style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}
+                    >
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setSelectedSupplierIds((current) =>
+                              e.target.checked
+                                ? [...current, row.supplierId]
+                                : current.filter((id) => id !== row.supplierId)
+                            )
+                          }
+                        />
+                        <span>
+                          {row.lastName} {row.firstName}
+                        </span>
+                      </span>
+                      <strong>{row.totalPremium.toFixed(2)}</strong>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
