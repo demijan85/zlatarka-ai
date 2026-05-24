@@ -137,12 +137,16 @@ Glavne funkcionalnosti:
 - generisanje priznanica u PDF formatu
 - priznaniice koriste istu formulu kao mesecni pregled, ukljucujuci override za `cena sa PDV` i `stimulacija`
 - PDF priznaniice za istorijske mesece sadrze sitnu napomenu da je stimulacija obracunavana van PDV osnovice
-- generisanje XML fajla za placanja
+- generisanje XML fajla za placanja za postojeci bankarski izvoz
+- generisanje dodatnog TXT fajla za Komercijalnu banku, po Halcom DPP TXT formatu, sa fiksnim redovima za zaglavlje, zbirni slog i po jedan nalog po proizvodjacu
+- svrha placanja u Komercijalna TXT izvozu za podeljene mesece koristi citljiv zapis `PRVI DEO` i `DRUGI DEO`
+- izbor banke za placanja je prikazan kroz kompaktan blok sa dve male akcije (`OTP XML` i `KomBank TXT`) kako ne bi zauzimao dodatni red
 - izbor samo odredjenih proizvodjaca za placanja i izvoz
 
 Napomena:
 
 - u XML za placanja ulaze samo proizvodjaci sa iznosom vecim od 0 i unetim tekucim racunom
+- u TXT za Komercijalnu banku ulaze samo proizvodjaci sa iznosom vecim od 0 i unetim tekucim racunom
 
 #### 3.1.4 Kvartalni pregled
 
