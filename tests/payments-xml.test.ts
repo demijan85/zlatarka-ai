@@ -45,6 +45,14 @@ test('buildPaymentsXml matches expected payment structure', () => {
   assert.match(xml, /<\/pmtorder><\/pmtorderrq>$/);
 });
 
+test('buildPaymentsXml allows overriding purpose for quarterly premium payments', () => {
+  const xml = buildPaymentsXml([baseRow], new Date('2026-03-13T14:57:47'), {
+    purpose: 'Premija, prvi kvartal 2026',
+  });
+
+  assert.match(xml, /<purpose>Premija, prvi kvartal 2026<\/purpose>/);
+});
+
 test('formatPaymentDateTime returns local datetime without timezone', () => {
   assert.equal(formatPaymentDateTime(new Date('2026-03-13T14:57:47')), '2026-03-13T14:57:47');
 });

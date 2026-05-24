@@ -92,3 +92,12 @@ test('buildKomercijalnaPaymentsTxt uses readable Serbian labels for split-month 
   assert.match(firstPaymentLine, /OTKUP MLEKA 05\/2026 PRVI DEO/);
   assert.match(secondPaymentLine, /OTKUP MLEKA 05\/2026 DRUGI DEO/);
 });
+
+test('buildKomercijalnaPaymentsTxt supports quarterly premium purposes', () => {
+  const content = buildKomercijalnaPaymentsTxt([baseRow], new Date('2026-05-19T09:15:00'), {
+    purpose: 'Premija, prvi kvartal 2026',
+  });
+
+  const paymentLine = content.split('\r\n')[2];
+  assert.match(paymentLine, /PREMIJA, PRVI KVARTAL 2026/);
+});

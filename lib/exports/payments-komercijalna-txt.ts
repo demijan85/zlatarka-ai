@@ -1,4 +1,4 @@
-import type { MonthlySummaryRow } from '../../types/domain';
+import type { PaymentExportRow } from '../../types/domain';
 import type { MonthlyExportPeriod } from '../utils/export-file-names';
 
 const PAYER_ACCOUNT_ID = '205000000007626228';
@@ -63,15 +63,15 @@ function totalToBankUnits(value: number): string {
   return fitLeft(String(Math.round(value * 100)), 15);
 }
 
-function formatRecipientName(row: MonthlySummaryRow): string {
+function formatRecipientName(row: PaymentExportRow): string {
   return fitRight(normalizeAsciiUpper(`${row.lastName} ${row.firstName}`.trim()), 35);
 }
 
-function formatRecipientAddress(row: MonthlySummaryRow): string {
+function formatRecipientAddress(row: PaymentExportRow): string {
   return fitRight(normalizeAsciiUpper(row.street?.trim() || '-'), 35);
 }
 
-function formatRecipientPlace(row: MonthlySummaryRow): string {
+function formatRecipientPlace(row: PaymentExportRow): string {
   return fitRight(normalizeAsciiUpper(row.city?.trim() || '-'), 10);
 }
 
@@ -105,7 +105,7 @@ function buildSummaryLine(totalAmount: number, count: number): string {
   );
 }
 
-function buildPaymentLine(row: MonthlySummaryRow, executionDate: Date, purpose: string): string {
+function buildPaymentLine(row: PaymentExportRow, executionDate: Date, purpose: string): string {
   const account = onlyDigits(row.bankAccount?.trim() || '');
   if (account.length !== 18) {
     throw new Error(`Neispravan račun za Komercijalnu banku: ${row.lastName} ${row.firstName}`);
@@ -136,11 +136,15 @@ function buildPaymentLine(row: MonthlySummaryRow, executionDate: Date, purpose: 
 }
 
 export function buildKomercijalnaPaymentsTxt(
-  rows: MonthlySummaryRow[],
+  rows: PaymentExportRow[],
   executionDate: Date,
-  options: { year: number; month: number; period: MonthlyExportPeriod }
+  options:
+    | { year: number; month: number; period: MonthlyExportPeriod; purpose?: never }
+    | { purpose: string; year?: never; month?: never; period?: never }
 ): string {
-  const purpose = buildPurpose(options.year, options.month, options.period);
+  const purpose = typeof options.purpose === 'string'
+    ? fitRight(normalizeAsciiUpper(options.purpose), 36)
+    : buildPurpose(options.year, options.month, options.period);
   const lines = [
     buildHeaderLine(executionDate),
     buildSummaryLine(rows.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0), rows.length),

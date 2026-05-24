@@ -1,4 +1,4 @@
-import type { MonthlySummaryRow } from '../../types/domain';
+import type { PaymentExportRow } from '../../types/domain';
 
 const PAYER_COMPANY_NAME = 'TATJANA JOKIĆ PR TRGOVINA NA VELIKO MLEČNIM PROIZVODIMA ZLATARKA KOMER';
 const PAYER_COMPANY_CITY = 'KOMARANI BB,31320, NOVA VAROŠ';
@@ -31,19 +31,26 @@ function normalizePaymentName(value: string): string {
     .toLocaleUpperCase('sr-RS');
 }
 
-function formatPayeeName(row: MonthlySummaryRow): string {
+function formatPayeeName(row: PaymentExportRow): string {
   return normalizePaymentName(`${row.lastName} ${row.firstName}`.trim());
 }
 
-function formatPayeeCity(row: MonthlySummaryRow): string {
+function formatPayeeCity(row: PaymentExportRow): string {
   const street = normalizePaymentName(row.street?.trim() || '-');
   const zipCode = normalizePaymentName(row.zipCode?.trim() || '-');
   const city = normalizePaymentName(row.city?.trim() || '-');
   return `${street},${zipCode},${city}`;
 }
 
-export function buildPaymentsXml(rows: MonthlySummaryRow[], dueDate: Date): string {
+export function buildPaymentsXml(
+  rows: PaymentExportRow[],
+  dueDate: Date,
+  options?: {
+    purpose?: string;
+  }
+): string {
   const due = formatPaymentDateTime(dueDate);
+  const purpose = options?.purpose?.trim() || 'Promet robe i usluga - medjufazna potrosnja';
   const orders = rows
     .map((row) => {
       const amount = Number(row.totalAmount || 0);
@@ -72,7 +79,7 @@ export function buildPaymentsXml(rows: MonthlySummaryRow[], dueDate: Date): stri
         `<trnuid>${crypto.randomUUID()}</trnuid>` +
         `<dtdue>${due}</dtdue>` +
         `<trnamt>${amount.toFixed(2)}</trnamt>` +
-        '<purpose>Promet robe i usluga - medjufazna potrosnja</purpose>' +
+        `<purpose>${escapeXml(purpose)}</purpose>` +
         '<purposecode>220</purposecode>' +
         '<curdef>RSD</curdef>' +
         '<refmodel />' +
