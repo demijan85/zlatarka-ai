@@ -1,5 +1,5 @@
 export type ExportLanguage = 'sr-Cyrl' | 'en';
-export type MonthlyExportKind = 'summary' | 'receipts' | 'payments';
+export type MonthlyExportKind = 'summary' | 'receipts' | 'payments' | 'payments-komercijalna';
 export type MonthlyExportPeriod = 'first' | 'second' | 'all';
 
 export function normalizeExportLanguage(value: string | null | undefined): ExportLanguage {
@@ -28,11 +28,13 @@ export function getMonthlyExportFileName(
   if (language === 'en') {
     if (kind === 'summary') return `monthly_purchase_summary_${year}_${monthPart}${periodPart}.xlsx`;
     if (kind === 'receipts') return `monthly_receipts_${year}_${monthPart}${periodPart}.pdf`;
+    if (kind === 'payments-komercijalna') return `payments_komercijalna_${year}_${monthPart}${periodPart}.txt`;
     return `payments_${year}_${monthPart}${periodPart}.xml`;
   }
 
   if (kind === 'summary') return `mesecni_pregled_otkupa_${year}_${monthPart}${periodPart}.xlsx`;
   if (kind === 'receipts') return `mesecne_priznanice_${year}_${monthPart}${periodPart}.pdf`;
+  if (kind === 'payments-komercijalna') return `placanja_komercijalna_${year}_${monthPart}${periodPart}.txt`;
   return `placanja_otkup_${year}_${monthPart}${periodPart}.xml`;
 }
 

@@ -235,6 +235,10 @@ Mesecni i kvartalni pregledi:
 - `lib/calculations/formulas.ts` od `2026-04-01` racuna PDV i na stimulaciju, dok za ranije datume zadrzava istorijsku racunicu sa stimulacijom van PDV osnovice
 - `lib/repositories/summaries.ts` i `lib/repositories/supplier-history.ts` prosledjuju datum unosa u formula sloj da bi se ispravna racunica primenila po periodu bez menjanja istorijskih isplata
 - PDF priznaniice koriste helper `lib/exports/monthly-receipts.ts` da prate istu racunicu kao `MonthlySummaryRow.totalAmount`, a osnovicu i PDV izvode iz vec izracunatog ukupnog iznosa tako da se isti PDF korektno renderuje i za stare i za nove mesece
+- izvoz placanja sada ima dve odvojene implementacije: postojeci XML (`lib/exports/payments-xml.ts`) i novi Komercijalna TXT (`lib/exports/payments-komercijalna-txt.ts`)
+- Komercijalna TXT prati Halcom `Domaći platni promet` specifikaciju (`Formati_DPP.pdf`): zaglavlje od 180 karaktera, zbirni slog od 180 karaktera i po jedan nalog od 218 karaktera po proizvodjacu, uz `CRLF` i zavrsni `0x1A`
+- Komercijalna TXT iznosi se zapisuju bez decimalne tacke i sa dve decimale, a polja za model/reference zaduzenja i odobrenja trenutno ostaju blanko dok banka ne potvrdi konkretne vrednosti za Zlatarku
+- svrha placanja u Komercijalna TXT izvozu prati obrazac `OTKUP MLEKA MM/YYYY`, a za podeljene mesece dodaje sufiks `PRVI DEO` ili `DRUGI DEO`
 - istorijski meseci dobijaju diskretnu napomenu o staroj PDV logici u `app/monthly-view/page.tsx`, `app/api/summaries/monthly/export/route.ts` i `app/api/summaries/monthly/receipts/pdf/route.ts`
 - `lib/utils/date.ts` ima helper-e za formatiranje ISO datuma u lokalizovani prikaz, a `lib/i18n/locale.ts` odvaja UI locale od locale-a za nativne date/month inpute
 - popup za unos mm zadrzava nativni `type=\"date\"` picker, ali prikaz izabranog datuma renderuje kroz lokalizovani srpski format preko zasebnog prikaznog sloja
@@ -443,6 +447,7 @@ Napomena:
 - `GET /api/summaries/monthly/export`
 - `GET /api/summaries/monthly/receipts/pdf`
 - `GET /api/summaries/monthly/payments`
+- `GET /api/summaries/monthly/payments/komercijalna`
 - `GET /api/summaries/quarterly`
   Vraca snapshot objekat sa redovima i metapodacima o pokrivenosti kvartala.
 - `GET /api/summaries/quarterly/export`

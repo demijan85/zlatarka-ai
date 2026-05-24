@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getQuarterlyExportFileName } from '../lib/utils/export-file-names.ts';
+import { getMonthlyExportFileName, getQuarterlyExportFileName } from '../lib/utils/export-file-names.ts';
+
+test('getMonthlyExportFileName supports Komercijalna TXT payments export', () => {
+  assert.equal(
+    getMonthlyExportFileName('payments-komercijalna', 2026, 5, 'sr-Cyrl', 'all'),
+    'placanja_komercijalna_2026_05.txt'
+  );
+  assert.equal(
+    getMonthlyExportFileName('payments-komercijalna', 2026, 5, 'en', 'second'),
+    'payments_komercijalna_2026_05_second_half.txt'
+  );
+});
 
 test('getQuarterlyExportFileName keeps the stable file name for complete quarters', () => {
   assert.equal(
