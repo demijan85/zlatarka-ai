@@ -56,6 +56,17 @@ export type MonthlySummaryRow = {
   stimulationOverride: number | null;
 };
 
+export type PaymentExportRow = {
+  supplierId: number;
+  firstName: string;
+  lastName: string;
+  city: string | null;
+  street: string | null;
+  zipCode: string | null;
+  bankAccount: string | null;
+  totalAmount: number;
+};
+
 export type MonthlySummaryOverride = {
   supplierId: number;
   yearMonth: string;
@@ -69,6 +80,10 @@ export type QuarterlySummaryRow = {
   supplierId: number;
   firstName: string;
   lastName: string;
+  city: string | null;
+  street: string | null;
+  zipCode: string | null;
+  bankAccount: string | null;
   qty: number;
   cows: number;
   premiumPerL: number;

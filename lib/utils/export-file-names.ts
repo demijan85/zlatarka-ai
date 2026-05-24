@@ -1,5 +1,6 @@
 export type ExportLanguage = 'sr-Cyrl' | 'en';
 export type MonthlyExportKind = 'summary' | 'receipts' | 'payments' | 'payments-komercijalna';
+export type QuarterlyExportKind = 'summary' | 'payments' | 'payments-komercijalna';
 export type MonthlyExportPeriod = 'first' | 'second' | 'all';
 
 export function normalizeExportLanguage(value: string | null | undefined): ExportLanguage {
@@ -50,4 +51,19 @@ export function getQuarterlyExportFileName(
   }
 
   return `${baseName}.xlsx`;
+}
+
+export function getQuarterlyPaymentExportFileName(
+  kind: QuarterlyExportKind,
+  year: number,
+  quarter: number,
+  language: ExportLanguage
+): string {
+  if (language === 'en') {
+    if (kind === 'payments-komercijalna') return `premium_payments_komercijalna_${year}_Q${quarter}.txt`;
+    return `premium_payments_${year}_Q${quarter}.xml`;
+  }
+
+  if (kind === 'payments-komercijalna') return `placanja_premija_komercijalna_${year}_Q${quarter}.txt`;
+  return `placanja_premija_${year}_Q${quarter}.xml`;
 }

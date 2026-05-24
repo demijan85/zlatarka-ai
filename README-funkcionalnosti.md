@@ -165,6 +165,10 @@ Glavne funkcionalnosti:
 - ako podaci jos ne pokrivaju ceo kvartal, prikazuje se datum do kog su unosi obuhvaceni
 - parcijalni XLSX izvoz dobija naziv sa suffix-om `through_YYYY-MM-DD` da bude jasno da nije finalan presek
 - izvoz kvartalnog pregleda u XLSX
+- generisanje placanja premije za kvartal u oba bankarska formata (`OTP XML` i `KomBank TXT`)
+- izbor banke za placanja premije je prikazan kroz isti kompaktan blok kao na mesecnom pregledu
+- mogucnost izbora samo odredjenih proizvodjaca za izvoz placanja premije
+- svrha placanja za kvartalne izvoze prati obrazac `Premija, prvi/drugi/treci/cetvrti kvartal 2026`
 
 #### 3.1.5 Pregled po proizvodjacu
 
