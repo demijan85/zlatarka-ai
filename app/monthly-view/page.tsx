@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FocusEvent, type MouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Building2, FileCode2, FileText } from 'lucide-react';
 import type { MonthlySummaryRow, Supplier } from '@/types/domain';
 import {
   defaultVersionedConstants,
@@ -340,14 +341,49 @@ export default function MonthlyViewPage() {
           >
             {t('monthly.exportReceiptsPdf')}
           </button>
-          <button
-            className="btn"
-            onClick={() =>
-              openExport('/api/summaries/monthly/payments', getMonthlyExportFileName('payments', year, month, language, period))
-            }
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 6px',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'var(--surface-muted)',
+              flexWrap: 'wrap',
+            }}
           >
-            {t('monthly.exportPayments')}
-          </button>
+            <span
+              className="muted"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}
+            >
+              <Building2 size={14} />
+              {t('monthly.exportPaymentsBanks')}
+            </span>
+            <button
+              className="btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() =>
+                openExport('/api/summaries/monthly/payments', getMonthlyExportFileName('payments', year, month, language, period))
+              }
+            >
+              <FileCode2 size={14} />
+              {t('monthly.exportPaymentsOtp')}
+            </button>
+            <button
+              className="btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() =>
+                openExport(
+                  '/api/summaries/monthly/payments/komercijalna',
+                  getMonthlyExportFileName('payments-komercijalna', year, month, language, period)
+                )
+              }
+            >
+              <FileText size={14} />
+              {t('monthly.exportPaymentsKomercijalna')}
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gap: 8 }}>
